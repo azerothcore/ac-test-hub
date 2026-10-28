@@ -1,0 +1,11 @@
+{
+  "$schema": "../../node_modules/oxlint/configuration_schema.json",
+  "plugins": [],
+  "jsPlugins": ["../no-await-in-return.js"],
+  "categories": {
+    "correctness": "off"
+  },
+  "rules": {
+    "local/no-await-in-return": "error"
+  }
+}

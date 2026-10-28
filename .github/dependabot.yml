@@ -1,0 +1,27 @@
+# Keeps the pinned actions and the npm packages up to date, once a month,
+# with one pull request per ecosystem.
+version: 2
+
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    # A release must be a week old before it is proposed.
+    cooldown:
+      default-days: 7
+    groups:
+      actions:
+        patterns: ['*']
+
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: monthly
+    # A release must be a week old before it is proposed.
+    cooldown:
+      default-days: 7
+    groups:
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]

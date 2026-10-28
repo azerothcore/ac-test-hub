@@ -1,0 +1,559 @@
+{
+  "version": 3,
+  "generatedAt": "2026-10-15T20:00:00.000Z",
+  "repository": "azerothcore/azerothcore-wotlk",
+  "pulls": [
+    {
+      "number": 90001,
+      "title": "fix(DB/SAI): Make the overseers call a nearby slave on aggro",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90001",
+      "author": {
+        "login": "frostwhisper"
+      },
+      "createdAt": "2026-10-12T20:00:00.000Z",
+      "updatedAt": "2026-10-15T15:12:00.000Z",
+      "labels": [
+        "DB",
+        "Waiting to be Tested"
+      ],
+      "status": "waiting",
+      "kind": "sql-only",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_1.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_1.sql"
+        }
+      ],
+      "comments": 2,
+      "issues": [
+        12345,
+        12346
+      ],
+      "testing": {
+        "instructions": "1. `.go creature 12345` and pull the boss.\n2. Check that the adds spawn at 50% health.\n3. Wipe and pull again: the adds must not stay in combat.",
+        "instructionsHeading": "How to Test the Changes",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": true,
+        "testedByAuthor": true,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "DB",
+        "topic": "SAI"
+      },
+      "topics": [
+        "61-64",
+        "Quest"
+      ],
+      "reports": []
+    },
+    {
+      "number": 90002,
+      "title": "fix(Scripts/Spells): Move rune refresh handling to a spell script",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90002",
+      "author": {
+        "login": "runeweaver"
+      },
+      "createdAt": "2026-10-01T20:00:00.000Z",
+      "updatedAt": "2026-10-15T07:12:00.000Z",
+      "labels": [
+        "CORE",
+        "Script",
+        "file-cpp",
+        "Waiting to be Tested"
+      ],
+      "status": "waiting",
+      "kind": "build",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_2.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_2.sql"
+        }
+      ],
+      "comments": 4,
+      "issues": [
+        12345,
+        12346
+      ],
+      "testing": {
+        "instructions": "1. `.go creature 12345` and pull the boss.\n2. Check that the adds spawn at 50% health.\n3. Wipe and pull again: the adds must not stay in combat.",
+        "instructionsHeading": "How to Test the Changes",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": true,
+        "testedByAuthor": true,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "Scripts",
+        "topic": "Spells"
+      },
+      "topics": [
+        "Class - Death Knight",
+        "80"
+      ],
+      "reports": [
+        {
+          "author": "stormrider",
+          "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90002#issuecomment-9000220",
+          "createdAt": "2026-10-13T20:00:00.000Z",
+          "kind": "in-game",
+          "result": "works"
+        }
+      ]
+    },
+    {
+      "number": 90003,
+      "title": "fix(DB/Spell): Chain buff ranks so every rank is consumed",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90003",
+      "author": {
+        "login": "tidecaller"
+      },
+      "createdAt": "2026-10-14T20:00:00.000Z",
+      "updatedAt": "2026-10-14T23:12:00.000Z",
+      "labels": [
+        "DB"
+      ],
+      "status": "open",
+      "kind": "sql-only",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_3.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_3.sql"
+        }
+      ],
+      "comments": 1,
+      "issues": [
+        13937,
+        4091
+      ],
+      "testing": {
+        "instructions": null,
+        "instructionsHeading": null,
+        "authorTests": null,
+        "reproStepsInIssue": true,
+        "needsMoreTesting": false,
+        "testedByAuthor": false,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "DB",
+        "topic": "Spell"
+      },
+      "topics": [],
+      "reports": []
+    },
+    {
+      "number": 90004,
+      "title": "fix(Core/Instance): Correct trapped supply crates",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90004",
+      "author": {
+        "login": "emberforge"
+      },
+      "createdAt": "2026-08-24T20:00:00.000Z",
+      "updatedAt": "2026-10-14T15:12:00.000Z",
+      "labels": [
+        "DB",
+        "CORE",
+        "file-cpp"
+      ],
+      "status": "open",
+      "kind": "build",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_4.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_4.sql"
+        }
+      ],
+      "comments": 8,
+      "issues": [
+        2222
+      ],
+      "testing": {
+        "instructions": "1. Open each trapped crate from outside its trigger radius.\n2. Walk into a fresh crate: the trap fires once.",
+        "instructionsHeading": "In-game checks still required",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": false,
+        "testedByAuthor": false,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "Core",
+        "topic": "Instance"
+      },
+      "topics": [
+        "Instance - Dungeon - Vanilla",
+        "50-59"
+      ],
+      "reports": [
+        {
+          "author": "quelfrost",
+          "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90004#issuecomment-9000450",
+          "createdAt": "2026-10-10T20:00:00.000Z",
+          "kind": "in-game",
+          "result": "broken"
+        },
+        {
+          "author": "snifftracker",
+          "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90004#issuecomment-9000440",
+          "createdAt": "2026-10-11T20:00:00.000Z",
+          "kind": "sniffs",
+          "result": "unknown"
+        }
+      ]
+    },
+    {
+      "number": 90005,
+      "title": "fix(DB/SAI): Hydra closes to melee when silenced",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90005",
+      "author": {
+        "login": "frostwhisper"
+      },
+      "createdAt": "2026-10-15T08:00:00.000Z",
+      "updatedAt": "2026-10-14T07:12:00.000Z",
+      "labels": [
+        "DB"
+      ],
+      "status": "open",
+      "kind": "sql-only",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_5.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_5.sql"
+        }
+      ],
+      "comments": 0,
+      "issues": [],
+      "testing": {
+        "instructions": null,
+        "instructionsHeading": null,
+        "authorTests": "Verified in game before and after the change.",
+        "reproStepsInIssue": false,
+        "needsMoreTesting": false,
+        "testedByAuthor": false,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "DB",
+        "topic": "SAI"
+      },
+      "topics": [],
+      "reports": []
+    },
+    {
+      "number": 90006,
+      "title": "feat(Core/Commands): Add a command to list pending respawns",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90006",
+      "author": {
+        "login": "runeweaver"
+      },
+      "createdAt": "2026-09-15T20:00:00.000Z",
+      "updatedAt": "2026-10-13T23:12:00.000Z",
+      "labels": [
+        "CORE",
+        "file-cpp"
+      ],
+      "status": "open",
+      "kind": "build",
+      "kindSource": "files",
+      "sqlFiles": [],
+      "comments": 3,
+      "issues": [],
+      "testing": {
+        "instructions": null,
+        "instructionsHeading": null,
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": false,
+        "testedByAuthor": false,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "Core",
+        "topic": "Commands"
+      },
+      "topics": [],
+      "reports": []
+    },
+    {
+      "number": 90007,
+      "title": "fix(DB/Loot): Remove a duplicated drop from the quartermaster",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90007",
+      "author": {
+        "login": "tidecaller"
+      },
+      "createdAt": "2026-10-09T20:00:00.000Z",
+      "updatedAt": "2026-10-13T15:12:00.000Z",
+      "labels": [
+        "DB",
+        "Testing in Progress"
+      ],
+      "status": "in-progress",
+      "kind": "sql-only",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_7.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_7.sql"
+        }
+      ],
+      "comments": 5,
+      "issues": [
+        12345,
+        12346
+      ],
+      "testing": {
+        "instructions": "1. `.go creature 12345` and pull the boss.\n2. Check that the adds spawn at 50% health.\n3. Wipe and pull again: the adds must not stay in combat.",
+        "instructionsHeading": "How to Test the Changes",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": true,
+        "testedByAuthor": true,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "DB",
+        "topic": "Loot"
+      },
+      "topics": [
+        "Loot"
+      ],
+      "reports": []
+    },
+    {
+      "number": 90008,
+      "title": "fix(Core/Movement): Stop pets from stuttering on stairs",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90008",
+      "author": {
+        "login": "emberforge"
+      },
+      "createdAt": "2026-09-25T20:00:00.000Z",
+      "updatedAt": "2026-10-13T07:12:00.000Z",
+      "labels": [
+        "CORE",
+        "file-cpp",
+        "Tested"
+      ],
+      "status": "tested",
+      "kind": "build",
+      "kindSource": "files",
+      "sqlFiles": [],
+      "comments": 9,
+      "issues": [
+        12345,
+        12346
+      ],
+      "testing": {
+        "instructions": "1. `.go creature 12345` and pull the boss.\n2. Check that the adds spawn at 50% health.\n3. Wipe and pull again: the adds must not stay in combat.",
+        "instructionsHeading": "How to Test the Changes",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": true,
+        "testedByAuthor": true,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "Core",
+        "topic": "Movement"
+      },
+      "topics": [],
+      "reports": [
+        {
+          "author": "stormrider",
+          "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90008#issuecomment-9000880",
+          "createdAt": "2026-10-07T20:00:00.000Z",
+          "kind": "in-game",
+          "result": "works"
+        },
+        {
+          "author": "oakenshield",
+          "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90008#issuecomment-9000870",
+          "createdAt": "2026-10-08T20:00:00.000Z",
+          "kind": "in-game",
+          "result": "works"
+        }
+      ]
+    },
+    {
+      "number": 90009,
+      "title": "chore(CI): Cache the tools build",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90009",
+      "author": {
+        "login": "frostwhisper"
+      },
+      "createdAt": "2026-10-13T20:00:00.000Z",
+      "updatedAt": "2026-10-12T23:12:00.000Z",
+      "labels": [
+        "Workflow"
+      ],
+      "status": "open",
+      "kind": "other",
+      "kindSource": "files",
+      "sqlFiles": [],
+      "comments": 0,
+      "issues": [],
+      "testing": {
+        "instructions": null,
+        "instructionsHeading": null,
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": false,
+        "testedByAuthor": false,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "CI",
+        "topic": null
+      },
+      "topics": [],
+      "reports": []
+    },
+    {
+      "number": 90010,
+      "title": "fix(DB/Creature): Fix the patroller path along the canal",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90010",
+      "author": {
+        "login": "runeweaver"
+      },
+      "createdAt": "2026-09-05T20:00:00.000Z",
+      "updatedAt": "2026-10-12T15:12:00.000Z",
+      "labels": [
+        "DB",
+        "Merge Conflicts"
+      ],
+      "status": "conflicts",
+      "kind": "sql-only",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_10.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_10.sql"
+        }
+      ],
+      "comments": 6,
+      "issues": [
+        12345,
+        12346
+      ],
+      "testing": {
+        "instructions": "1. `.go creature 12345` and pull the boss.\n2. Check that the adds spawn at 50% health.\n3. Wipe and pull again: the adds must not stay in combat.",
+        "instructionsHeading": "How to Test the Changes",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": true,
+        "testedByAuthor": true,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "DB",
+        "topic": "Creature"
+      },
+      "topics": [],
+      "reports": []
+    },
+    {
+      "number": 90011,
+      "title": "refactor(Scripts/Instance): Modernize the tournament scripts",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90011",
+      "author": {
+        "login": "tidecaller"
+      },
+      "createdAt": "2026-10-06T20:00:00.000Z",
+      "updatedAt": "2026-10-12T07:12:00.000Z",
+      "labels": [
+        "Script",
+        "file-cpp"
+      ],
+      "status": "wip",
+      "kind": "build",
+      "kindSource": "labels",
+      "sqlFiles": [],
+      "comments": 1,
+      "issues": [
+        12345,
+        12346
+      ],
+      "testing": {
+        "instructions": "1. `.go creature 12345` and pull the boss.\n2. Check that the adds spawn at 50% health.\n3. Wipe and pull again: the adds must not stay in combat.",
+        "instructionsHeading": "How to Test the Changes",
+        "authorTests": null,
+        "reproStepsInIssue": false,
+        "needsMoreTesting": true,
+        "testedByAuthor": true,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "Scripts",
+        "topic": "Instance"
+      },
+      "topics": [],
+      "reports": null
+    },
+    {
+      "number": 90012,
+      "title": "fix(DB/Quest): Correct the reward text of a Northrend quest chain",
+      "url": "https://github.com/azerothcore/azerothcore-wotlk/pull/90012",
+      "author": {
+        "login": "emberforge"
+      },
+      "createdAt": "2026-10-04T20:00:00.000Z",
+      "updatedAt": "2026-10-11T23:12:00.000Z",
+      "labels": [
+        "DB",
+        "Waiting For More Info from Author"
+      ],
+      "status": "needs-info",
+      "kind": "sql-only",
+      "kindSource": "files",
+      "sqlFiles": [
+        {
+          "path": "data/sql/updates/pending_db_world/rev_12.sql",
+          "database": "world",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_world/rev_12.sql"
+        },
+        {
+          "path": "data/sql/updates/pending_db_characters/rev_13.sql",
+          "database": "characters",
+          "rawUrl": "https://github.com/azerothcore/azerothcore-wotlk/raw/sample/data/sql/updates/pending_db_characters/rev_13.sql"
+        }
+      ],
+      "comments": 4,
+      "issues": [
+        13937,
+        4091
+      ],
+      "testing": {
+        "instructions": null,
+        "instructionsHeading": null,
+        "authorTests": null,
+        "reproStepsInIssue": true,
+        "needsMoreTesting": false,
+        "testedByAuthor": false,
+        "testedByOthers": false
+      },
+      "area": {
+        "group": "DB",
+        "topic": "Quest"
+      },
+      "topics": [
+        "71-74",
+        "Quest"
+      ],
+      "reports": []
+    }
+  ]
+}

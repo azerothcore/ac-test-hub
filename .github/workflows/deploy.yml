@@ -1,0 +1,84 @@
+name: Snapshot and deploy
+
+# Rebuilds the site with fresh data every 30 minutes, and on every push to main.
+on:
+  schedule:
+    # UTC, off the top of the hour when GitHub is busiest. Only PRs that
+    # changed since the last snapshot are fetched again.
+    - cron: '7,37 * * * *'
+    # Once a day, fetch everything again, so labels added to linked issues
+    # since a PR last changed are picked up too.
+    - cron: '22 3 * * *'
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      full_refresh:
+        description: Fetch every PR again instead of reusing the last snapshot
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: read # configure-pages reads the site's address
+    steps:
+      # Actions are pinned to a full commit SHA (GitHub's secure-use guide); Dependabot updates them.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # No dependency cache: a workflow that deploys should not restore what another run saved.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - run: npm ci
+      - run: npm test
+
+      # Gives the address of the published site, where the last data.json lives.
+      - id: pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      # Reads public data only. The workflow token allows 1,000 REST requests
+      # an hour. A full snapshot needs about two per open PR (files, comments)
+      # plus one per linked issue; an incremental one only does that for the
+      # PRs that changed. If this step fails, nothing is deployed and the last
+      # site stays up.
+      - name: Snapshot open pull requests
+        run: npm run snapshot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREVIOUS_SNAPSHOT_URL: ${{ steps.pages.outputs.base_url }}/data.json
+          FULL_REFRESH: ${{ github.event.schedule == '22 3 * * *' || inputs.full_refresh == true }}
+
+      - run: npm run build
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      pages: write # to deploy to Pages
+      id-token: write # to prove the deployment comes from this workflow
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1
