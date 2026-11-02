@@ -1,0 +1,28 @@
+[Unit]
+Description=Test Hub TC9 API gateway
+Wants=network-online.target
+After=network-online.target
+[Service]
+Type=simple
+User=actesthub
+Group=actesthub
+WorkingDirectory=/opt/ac-test-hub
+EnvironmentFile=/etc/ac-test-hub/tc9.env
+ExecStart=/usr/local/bin/node /opt/ac-test-hub/server/gateway.mjs
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=15
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+UMask=0077
+[Install]
+WantedBy=multi-user.target

@@ -9,6 +9,12 @@ A page that lists the open [AzerothCore](https://github.com/azerothcore/azerothc
 
 The queue can be filtered by the part of the game a PR touches (class, instance, level range, code area), so testers find the PRs they know how to test.
 
+## Compile and provision test realms
+
+This fork connects to a TC9 compilation/provisioning service through a small Node.js gateway. Configure a single dedicated Test Hub token in `.env`; every visitor uses that shared account without logging in or supplying a token. Users can compile a selected PR with modules and optional test characters, follow progress, manage the shared realm library and download built cores. The token stays server-side.
+
+See [configuration and deployment](deploy/README.md) and [.env.example](.env.example). The deployed fork is available at https://expanded.space/test-hub/.
+
 ## Why
 
 [Testing is how a PR reaches `master`](https://www.azerothcore.org/wiki/how-to-test-a-pr), and anyone who can run a server can help. The [Waiting to be Tested](https://github.com/azerothcore/azerothcore-wotlk/pulls?q=is%3Apr+is%3Aopen+label%3A%22Waiting+to+be+Tested%22) label alone shows very few of the [open PRs](https://github.com/azerothcore/azerothcore-wotlk/pulls?q=is%3Apr+is%3Aopen) (2 of 133 on 15 October 2026). The [PR template](https://github.com/azerothcore/azerothcore-wotlk/blob/master/pull_request_template.md) also has a "This pull request requires further testing" box. The hub lists both kinds of PR and puts them first.
@@ -22,7 +28,7 @@ GitHub Actions, every 30 minutes
         └── previous data.json from the site: PRs that did not change are not fetched again
 ```
 
-There is no server and no token in the browser. A scheduled workflow reads public data with its own token, writes one JSON file and publishes a static site. If the search for open PRs fails, nothing is deployed and the previous site stays up; if a single PR's details can't be read, that PR keeps what the previous snapshot knew.
+The PR queue has no token in the browser. A scheduled workflow reads public data with its own token, writes one JSON file and publishes a static site. This fork also supports an optional self-hosted TC9 gateway for shared compilation and realm management (see below). If the search for open PRs fails, nothing is deployed and the previous site stays up; if a single PR's details can't be read, that PR keeps what the previous snapshot knew.
 
 The snapshot reuses the details of every PR whose `updated_at` did not change since the previous one, so most runs make only a few requests. Once a day it fetches everything again, which also picks up labels added to linked issues in the meantime.
 

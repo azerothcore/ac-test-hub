@@ -14,10 +14,11 @@ interface Props {
   prefs: ServerPrefs;
   onPrefsChange: (prefs: ServerPrefs) => void;
   onBack: () => void;
+  onProvision: () => void;
 }
 
 /** One pull request: what it is, then the three steps to test it. */
-export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack }: Props) {
+export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onProvision }: Props) {
   const { testing } = pull;
   const area = areaText(pull.area);
 
@@ -46,7 +47,11 @@ export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack }: P
               {STATUS_TEXT[pull.status]}
             </span>
           )}
-          {wantsTesters(pull) && pull.status !== 'waiting' && <span className="tag" data-wanted>Asking for testers</span>}
+          {wantsTesters(pull) && pull.status !== 'waiting' && (
+            <span className="tag" data-wanted>
+              Asking for testers
+            </span>
+          )}
           {testing.testedByAuthor && <span className="tag">Tested by the author</span>}
           {testing.testedByOthers && <span className="tag">Tested by others</span>}
         </div>
@@ -82,6 +87,13 @@ export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack }: P
 
       <ol className="steps">
         <ReadStep pull={pull} repository={repository} />
+        <li className="step">
+          <h3 className="step__title">Use a hosted test realm</h3>
+          <p>Compile this PR and provision a realm on the connected TC9 service.</p>
+          <button type="button" className="button button--primary" onClick={onProvision}>
+            Compile & provision PR #{pull.number}
+          </button>
+        </li>
         <RunStep pull={pull} prefs={prefs} onPrefsChange={onPrefsChange} />
         <ReportStep pull={pull} repository={repository} prefs={prefs} onPrefsChange={onPrefsChange} />
       </ol>
