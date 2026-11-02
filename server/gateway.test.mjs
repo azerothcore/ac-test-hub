@@ -114,6 +114,7 @@ test('mutations require both same origin and CSRF, and preserve idempotency', as
   assert.equal(response.status, 202);
   assert.equal(response.headers.get('retry-after'), '5');
   assert.equal(seen.at(-1).headers['Idempotency-Key'], 'stable-intent-42');
+  assert.equal(seen.at(-1).headers['X-TC9-Reuse-Active'], 'true');
   assert.deepEqual(JSON.parse(seen.at(-1).body), input);
   assert.equal((await call('/v1/builds', { method: 'POST', body: JSON.stringify({ input: 'x'.repeat(65536) }) })).status, 400);
 });

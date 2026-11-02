@@ -170,6 +170,9 @@ export function createGateway(options = {}) {
         return;
       }
       const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+      if (method === 'POST' && url.pathname === '/v1/builds') {
+        headers['X-TC9-Reuse-Active'] = 'true';
+      }
       if (url.pathname.endsWith('/account')) {
         const visitor = readVisitor(req.headers.cookie);
         if (!visitor) {
