@@ -11,7 +11,7 @@ The queue can be filtered by the part of the game a PR touches (class, instance,
 
 ## Compile and provision test realms
 
-This fork connects to a TC9 compilation/provisioning service through a small Node.js gateway. Configure a single dedicated Test Hub token in `.env`; every visitor uses that shared account without logging in or supplying a token. Users can compile a selected PR with modules and optional test characters, follow progress, manage the shared realm library and download built cores. The token stays server-side.
+This fork connects to a TC9 compilation/provisioning service through a small Node.js gateway. Configure a single dedicated Test Hub token in `.env`; every visitor uses that shared account without logging in or supplying a token. Users can compile a selected PR with modules and optional test characters, follow progress on the PR even after closing the dialog, manage the shared realm library, get a separate personal game account for each visitor, and download built cores. The local and hosted run options share one step. The token stays server-side.
 
 See [configuration and deployment](deploy/README.md) and [.env.example](.env.example). The deployed fork is available at https://expanded.space/test-hub/.
 

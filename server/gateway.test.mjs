@@ -177,3 +177,36 @@ test('missing shared token disables API operations with an actionable configurat
     empty.closeAllConnections();
   }
 });
+
+test('game accounts use separate private visitor keys while API authentication remains shared', async () => {
+  const first = await call('/connection', { headers: { Cookie: '' } });
+  const firstCookies = first.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  const firstCSRF = (await first.json()).csrf;
+  const second = await call('/connection', { headers: { Cookie: '' } });
+  const secondCookies = second.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  const secondCSRF = (await second.json()).csrf;
+  assert.match(firstCookies, /__Secure-tc9-player=/);
+  assert.equal(
+    (await call('/v1/realms/realm-1/account', { headers: { Cookie: firstCookies, 'X-TC9-Account-Key': 'attacker-key' } })).status,
+    200,
+  );
+  const keyA = seen.at(-1).headers['X-TC9-Account-Key'];
+  assert.match(keyA, /^[a-f0-9]{64}$/);
+  await call('/v1/realms/realm-1/account', { method: 'POST', body: '{}', headers: { Cookie: firstCookies, 'X-CSRF-Token': firstCSRF } });
+  assert.equal(seen.at(-1).headers['X-TC9-Account-Key'], keyA);
+  await call('/v1/realms/realm-1/account', { method: 'POST', body: '{}', headers: { Cookie: secondCookies, 'X-CSRF-Token': secondCSRF } });
+  assert.notEqual(seen.at(-1).headers['X-TC9-Account-Key'], keyA);
+  assert.equal(seen.at(-1).headers.Authorization, `Bearer ${token}`);
+  await call('/v1/realms/realm-2/account', { headers: { Cookie: firstCookies } });
+  assert.notEqual(seen.at(-1).headers['X-TC9-Account-Key'], keyA);
+  await call('/v1/realms/realm-1/account', { headers: { Cookie: firstCookies } });
+  assert.equal(seen.at(-1).headers['X-TC9-Account-Key'], keyA);
+  assert.equal((await call('/v1/realms/realm-1/account', { headers: { Cookie: cookie } })).status, 401);
+  assert.equal(allowedRoute('GET', new URL('/v1/builds/build-1/account', base)), false);
+});

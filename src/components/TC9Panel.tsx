@@ -1,19 +1,12 @@
 import { createPortal } from 'react-dom';
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useHostedBuilds } from '../useHostedBuilds';
+import { canCompileAgain, taskKey } from '../lib/hosted';
+import type { HostedTasks } from '../lib/hosted';
+import { PlayerAccount } from './PlayerAccount';
+import { HostedProgress } from './HostedProgress';
 import { API_BASE, APIError, parseCharacters, request } from '../lib/tc9';
-import type {
-  Artifact,
-  Build,
-  BuildInput,
-  BuildPage,
-  Connection,
-  Module,
-  Phase,
-  Realm,
-  Repository,
-  ServiceStatus,
-  TC9Config,
-} from '../lib/tc9';
+import type { Artifact, BuildInput, BuildPage, Connection, Module, Phase, Realm, Repository, ServiceStatus, TC9Config } from '../lib/tc9';
 import type { PullSummary } from '../lib/types';
 
 const CHARACTER_EXAMPLE = '[\n  {"name":"Tester","race":"human","class":"warrior","level":80,"money_gold":0}\n]';
@@ -114,11 +107,10 @@ function RealmCard({
   busy: boolean;
   report: (error: unknown) => void;
 }) {
-  const [showPassword, setShowPassword] = useState(false);
   const path = `v1/realms/${encodeURIComponent(realm.id)}`;
   const stopped = realm.state === 'offline';
   return (
-    <article className="tc9-card">
+    <article className="tc9-card" id={`tc9-realm-${realm.id}`}>
       <h4>
         {realm.realm_name || realm.id} <span className="tag">{realm.state}</span>
       </h4>
@@ -138,14 +130,7 @@ function RealmCard({
           {realm.realmlist_id && <> · Realm ID {realm.realmlist_id}</>}
         </p>
       )}
-      {realm.admin_username && (
-        <p>
-          Game account: <code>{realm.admin_username}</code> · Password: <code>{showPassword ? realm.admin_password : '••••••••'}</code>{' '}
-          <button type="button" className="button button--quiet" onClick={() => setShowPassword(!showPassword)}>
-            {showPassword ? 'Hide password' : 'Show password'}
-          </button>
-        </p>
-      )}
+      <PlayerAccount realm={realm} csrf={csrf} />
       <div className="tc9-actions">
         <button className="button" type="button" disabled={busy || !stopped} onClick={() => act(`${path}/start`, 'POST')}>
           Start
@@ -185,11 +170,13 @@ export function TC9Panel({
   pull,
   open,
   onOpenChange,
+  onHostedChange,
 }: {
   repository: string;
   pull: PullSummary | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  onHostedChange: (tasks: HostedTasks) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [config, setConfig] = useState<TC9Config | null>(null);
@@ -207,7 +194,23 @@ export function TC9Panel({
   const [selectedModules, setSelectedModules] = useState<string[]>([]);
   const [moduleFilter, setModuleFilter] = useState('');
   const [characters, setCharacters] = useState('[]');
-  const intent = useRef<{ body: string; key: string } | null>(null);
+  const actionPending = useRef(false);
+  const selectedKey = pull ? taskKey(repository, pull.number) : null;
+  const { tracker, tasks } = useHostedBuilds(connection.connected, selectedKey);
+  const selectedTask = selectedKey ? tasks[selectedKey] : undefined;
+  const submissionPending = !!selectedTask?.submitting;
+  const [now, setNow] = useState(() => Date.now());
+  const retryIn = Math.max(0, Math.ceil(((selectedTask?.retryAt ?? 0) - now) / 1000));
+  useEffect(() => {
+    onHostedChange(tasks);
+  }, [tasks, onHostedChange]);
+  useEffect(() => {
+    if (!selectedTask?.retryAt) {
+      return;
+    }
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [selectedTask?.retryAt]);
   const retryUntil = useRef(0);
   const csrf = connection.csrf ?? '';
   const reset = useCallback(() => {
@@ -217,7 +220,6 @@ export function TC9Panel({
     setRealms([]);
     setModules([]);
     setRepositories([]);
-    intent.current = null;
     setOffset(0);
   }, []);
   const report = useCallback(
@@ -267,8 +269,11 @@ export function TC9Panel({
       setStatus(service);
       setBuilds(page);
       setRealms(ownedRealms);
+      for (const build of page.builds) {
+        tracker.accept(build);
+      }
     },
-    [offset],
+    [offset, tracker],
   );
   useEffect(() => {
     if (!connection.connected || !open) {
@@ -323,6 +328,10 @@ export function TC9Panel({
   }, [connection.connected, open, refresh, report]);
 
   function connect() {
+    if (actionPending.current) {
+      return;
+    }
+    actionPending.current = true;
     setBusy(true);
     setError('');
     void request<Connection>('connection')
@@ -332,12 +341,16 @@ export function TC9Panel({
         setMessage('Test Hub connection refreshed.');
       })
       .catch(report)
-      .finally(() => setBusy(false));
+      .finally(() => {
+        actionPending.current = false;
+        setBusy(false);
+      });
   }
   function act(path: string, method: string, question?: string) {
-    if (busy || (question && !window.confirm(question))) {
+    if (actionPending.current || submissionPending || (question && !window.confirm(question))) {
       return;
     }
+    actionPending.current = true;
     setBusy(true);
     setError('');
     setMessage('');
@@ -347,15 +360,22 @@ export function TC9Panel({
         return refresh();
       })
       .catch(report)
-      .finally(() => setBusy(false));
+      .finally(() => {
+        actionPending.current = false;
+        setBusy(false);
+      });
   }
   function compile() {
-    if (!pull || busy) {
+    if (!pull || actionPending.current || submissionPending || retryIn > 0) {
+      return;
+    }
+    const again = canCompileAgain(selectedTask);
+    if (selectedTask?.id && !again) {
       return;
     }
     let input: BuildInput;
     try {
-      input = {
+      input = selectedTask?.intent?.input ?? {
         repository,
         pr_number: pull.number,
         build_server: server,
@@ -366,22 +386,18 @@ export function TC9Panel({
       report(failure);
       return;
     }
-    const body = JSON.stringify(input);
-    if (!intent.current || intent.current.body !== body) {
-      intent.current = { body, key: crypto.randomUUID() };
-    }
-    setBusy(true);
     setError('');
     setMessage('');
-    void request<Build>('v1/builds', { method: 'POST', data: input, csrf, key: intent.current.key })
-      .then((build) => {
-        setMessage(`Build ${build.id} accepted for revision ${build.sha || 'being resolved'}.`);
-        intent.current = null;
-        setOffset(0);
-        return refresh();
+    void tracker
+      .submit(input, csrf, again)
+      .then(() => {
+        // Refresh failures do not turn an already accepted submission into a failed one.
+        if (tracker.snapshot()[taskKey(input.repository, input.pr_number)]?.id) {
+          setOffset(0);
+          void refresh().catch(report);
+        }
       })
-      .catch(report)
-      .finally(() => setBusy(false));
+      .catch(report);
   }
   if (!config) {
     return open
@@ -488,83 +504,119 @@ export function TC9Panel({
                         This repository is unavailable for compilation with this account, or repository choices are still loading.
                       </p>
                     )}
-                    <form
-                      className="tc9-form"
-                      onSubmit={(event) => {
-                        event.preventDefault();
-                        compile();
-                      }}
-                    >
-                      <label>
-                        Compilation server
-                        <select value={server} onChange={(event) => setServer(event.target.value)}>
-                          <option value="auto">Automatic</option>
-                          {status?.build_servers.map((name) => (
-                            <option key={name} value={name}>
-                              {name}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <details>
-                        <summary>Optional modules ({selectedModules.length}/5)</summary>
-                        <label>
-                          Find a module
-                          <input type="search" value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} />
-                        </label>
-                        <fieldset className="tc9-modules">
-                          <legend>Approved modules</legend>
-                          {modules
-                            .filter((mod) => `${mod.name} ${mod.description}`.toLowerCase().includes(moduleFilter.toLowerCase()))
-                            .map((mod) => (
-                              <label key={mod.name}>
-                                <input
-                                  type="checkbox"
-                                  checked={selectedModules.includes(mod.name)}
-                                  disabled={!selectedModules.includes(mod.name) && selectedModules.length >= 5}
-                                  onChange={(event) =>
-                                    setSelectedModules(
-                                      event.target.checked
-                                        ? [...selectedModules, mod.name]
-                                        : selectedModules.filter((name) => name !== mod.name),
-                                    )
-                                  }
-                                />
-                                <span>
-                                  <strong>{mod.name}</strong>
-                                  <small>{mod.description}</small>
-                                </span>
-                              </label>
-                            ))}
-                        </fieldset>
-                      </details>
-                      <details>
-                        <summary>Optional test characters, items & quests</summary>
-                        <p>
-                          Up to three characters. Leave [] for none. Valid race/class combinations, level 1–80, gold 0–10000. Items use{' '}
-                          {`{"id":6948,"count":1}`}; quest fields are active_quests and completed_quests (arrays of IDs, 25 combined).
-                        </p>
-                        <button type="button" className="button button--quiet" onClick={() => setCharacters(CHARACTER_EXAMPLE)}>
-                          Use level 80 tester example
-                        </button>
-                        <label>
-                          Character configuration (JSON)
-                          <textarea
-                            rows={7}
-                            spellCheck={false}
-                            value={characters}
-                            onChange={(event) => setCharacters(event.target.value)}
-                          />
-                        </label>
-                      </details>
-                      <button
-                        type="submit"
-                        className="button button--primary"
-                        disabled={busy || !eligible || !status?.available || !status.builds_available}
+                    {selectedTask && (
+                      <HostedProgress
+                        task={selectedTask}
+                        showAction={!selectedTask.intent && !canCompileAgain(selectedTask)}
+                        onOpen={() =>
+                          document
+                            .getElementById(
+                              selectedTask.build?.realm ? `tc9-realm-${selectedTask.build.realm.id}` : `tc9-build-${selectedTask.id}`,
+                            )
+                            ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                        }
+                      />
+                    )}
+                    {(!selectedTask?.id || canCompileAgain(selectedTask)) && (
+                      <form
+                        className="tc9-form"
+                        onSubmit={(event) => {
+                          event.preventDefault();
+                          compile();
+                        }}
                       >
-                        {busy ? 'Submitting…' : 'Compile & create realm'}
-                      </button>
-                    </form>
+                        {selectedTask?.intent && (
+                          <p className="notice">
+                            The original request is preserved: server {selectedTask.intent.input.build_server}, modules{' '}
+                            {selectedTask.intent.input.modules.join(', ') || 'none'}, {selectedTask.intent.input.characters?.length ?? 0}{' '}
+                            test characters. Retrying checks or resumes this exact compilation.
+                          </p>
+                        )}
+                        <fieldset
+                          className="tc9-build-options"
+                          hidden={!!selectedTask?.intent}
+                          disabled={submissionPending || !!selectedTask?.intent}
+                        >
+                          <label>
+                            Compilation server
+                            <select value={server} onChange={(event) => setServer(event.target.value)}>
+                              <option value="auto">Automatic</option>
+                              {status?.build_servers.map((name) => (
+                                <option key={name} value={name}>
+                                  {name}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <details>
+                            <summary>Optional modules ({selectedModules.length}/5)</summary>
+                            <label>
+                              Find a module
+                              <input type="search" value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} />
+                            </label>
+                            <fieldset className="tc9-modules">
+                              <legend>Approved modules</legend>
+                              {modules
+                                .filter((mod) => `${mod.name} ${mod.description}`.toLowerCase().includes(moduleFilter.toLowerCase()))
+                                .map((mod) => (
+                                  <label key={mod.name}>
+                                    <input
+                                      type="checkbox"
+                                      checked={selectedModules.includes(mod.name)}
+                                      disabled={!selectedModules.includes(mod.name) && selectedModules.length >= 5}
+                                      onChange={(event) =>
+                                        setSelectedModules(
+                                          event.target.checked
+                                            ? [...selectedModules, mod.name]
+                                            : selectedModules.filter((name) => name !== mod.name),
+                                        )
+                                      }
+                                    />
+                                    <span>
+                                      <strong>{mod.name}</strong>
+                                      <small>{mod.description}</small>
+                                    </span>
+                                  </label>
+                                ))}
+                            </fieldset>
+                          </details>
+                          <details>
+                            <summary>Optional test characters, items & quests</summary>
+                            <p>
+                              Up to three characters. Leave [] for none. Valid race/class combinations, level 1–80, gold 0–10000. Items use{' '}
+                              {`{"id":6948,"count":1}`}; quest fields are active_quests and completed_quests (arrays of IDs, 25 combined).
+                            </p>
+                            <button type="button" className="button button--quiet" onClick={() => setCharacters(CHARACTER_EXAMPLE)}>
+                              Use level 80 tester example
+                            </button>
+                            <label>
+                              Character configuration (JSON)
+                              <textarea
+                                rows={7}
+                                spellCheck={false}
+                                value={characters}
+                                onChange={(event) => setCharacters(event.target.value)}
+                              />
+                            </label>
+                          </details>
+                        </fieldset>
+                        <button
+                          type="submit"
+                          className="button button--primary"
+                          disabled={busy || submissionPending || retryIn > 0 || !eligible || !status?.available || !status.builds_available}
+                        >
+                          {submissionPending
+                            ? 'Submitting…'
+                            : retryIn > 0
+                              ? `Retry in ${retryIn}s`
+                              : selectedTask?.intent
+                                ? 'Retry same submission'
+                                : canCompileAgain(selectedTask)
+                                  ? 'Compile again'
+                                  : 'Compile & create realm'}
+                        </button>
+                      </form>
+                    )}
                   </>
                 )}
               </section>
@@ -572,7 +624,7 @@ export function TC9Panel({
                 <h3 id="tc9-builds">Test Hub builds ({builds.total})</h3>
                 {builds.builds.length === 0 && <p>No builds on this page.</p>}
                 {builds.builds.map((build) => (
-                  <article key={build.id} className="tc9-card">
+                  <article key={build.id} id={`tc9-build-${build.id}`} className="tc9-card">
                     <h4>
                       {build.repository} #{build.pr_number} <span className="tag">{build.status}</span>
                     </h4>
@@ -621,7 +673,7 @@ export function TC9Panel({
                 <h3 id="tc9-realms">Test Hub realms ({realms.length})</h3>
                 {realms.length === 0 && <p>No shared realms yet. Submit a PR build above to create one.</p>}
                 {realms.map((realm) => (
-                  <RealmCard key={realm.id} realm={realm} csrf={csrf} act={act} busy={busy} report={report} />
+                  <RealmCard key={realm.id} realm={realm} csrf={csrf} act={act} busy={busy || submissionPending} report={report} />
                 ))}
               </section>
             </>

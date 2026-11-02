@@ -1,3 +1,4 @@
+import type { HostedTask } from '../lib/hosted';
 import type { ServerPrefs } from '../lib/commands';
 import { wantsTesters } from '../lib/queue';
 import type { PullSummary } from '../lib/types';
@@ -15,10 +16,11 @@ interface Props {
   onPrefsChange: (prefs: ServerPrefs) => void;
   onBack: () => void;
   onProvision: () => void;
+  hostedTask?: HostedTask;
 }
 
 /** One pull request: what it is, then the three steps to test it. */
-export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onProvision }: Props) {
+export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onProvision, hostedTask }: Props) {
   const { testing } = pull;
   const area = areaText(pull.area);
 
@@ -87,14 +89,14 @@ export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onP
 
       <ol className="steps">
         <ReadStep pull={pull} repository={repository} />
-        <li className="step">
-          <h3 className="step__title">Use a hosted test realm</h3>
-          <p>Compile this PR and provision a realm on the connected TC9 service.</p>
-          <button type="button" className="button button--primary" onClick={onProvision}>
-            Compile & provision PR #{pull.number}
-          </button>
-        </li>
-        <RunStep pull={pull} prefs={prefs} onPrefsChange={onPrefsChange} />
+        <RunStep
+          key={`${repository}#${pull.number}`}
+          pull={pull}
+          prefs={prefs}
+          onPrefsChange={onPrefsChange}
+          onProvision={onProvision}
+          hostedTask={hostedTask}
+        />
         <ReportStep pull={pull} repository={repository} prefs={prefs} onPrefsChange={onPrefsChange} />
       </ol>
     </article>

@@ -6,6 +6,8 @@ import { PullList } from './components/PullList';
 import { QueueFilters } from './components/QueueFilters';
 import { timeAgo } from './format';
 import { useHashSelection, useSnapshot, useStoredState } from './hooks';
+import { taskKey } from './lib/hosted';
+import type { HostedTasks } from './lib/hosted';
 import type { ServerPrefs } from './lib/commands';
 import { WIKI } from './lib/config';
 import {
@@ -44,6 +46,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
   const [prefs, setPrefs] = useStoredState<ServerPrefs>('ac-test-hub:prefs', DEFAULT_PREFS);
   const [selected, select] = useHashSelection();
   const [provisionOpen, setProvisionOpen] = useState(false);
+  const [hostedTasks, setHostedTasks] = useState<HostedTasks>({});
   const detailRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => sortPulls(filterPulls(snapshot.pulls, filters), sort.key), [snapshot, filters, sort.key]);
@@ -74,7 +77,13 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
           <p className="masthead__for">for AzerothCore pull requests</p>
         </div>
         <Summary snapshot={snapshot} />
-        <TC9Panel repository={snapshot.repository} pull={current} open={provisionOpen} onOpenChange={setProvisionOpen} />
+        <TC9Panel
+          repository={snapshot.repository}
+          pull={current}
+          open={provisionOpen}
+          onOpenChange={setProvisionOpen}
+          onHostedChange={setHostedTasks}
+        />
         <p className="masthead__meta">
           {sample ? (
             <strong className="sample-flag">Made-up sample data</strong>
@@ -110,6 +119,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
             onPrefsChange={setPrefs}
             onBack={() => select(null)}
             onProvision={() => setProvisionOpen(true)}
+            hostedTask={hostedTasks[taskKey(snapshot.repository, current.number)]}
           />
         ) : selected !== null ? (
           <div className="empty">

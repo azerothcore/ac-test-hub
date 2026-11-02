@@ -7,7 +7,7 @@ import { pathToFileURL } from 'node:url';
 const TTL = 8 * 60 * 60 * 1000;
 const ID = '[A-Za-z0-9_-]{1,128}';
 const route = new RegExp(
-  `^/v1/(?:status|repositories|modules|pull-requests|builds|realms|(?:builds|realms)/${ID}(?:/(?:artifact|download|start|stop|recompile))?)$`,
+  `^/v1/(?:status|repositories|modules|pull-requests|builds|realms|(?:builds|realms)/${ID}(?:/(?:artifact|download|start|stop|recompile|account))?)$`,
 );
 
 export function allowedRoute(method, url) {
@@ -20,7 +20,11 @@ export function allowedRoute(method, url) {
     return false;
   }
   if (method === 'GET') {
-    return !action || (['artifact', 'download', 'recompile'].includes(action) && (action !== 'recompile' || resource === 'realms'));
+    return (
+      !action ||
+      (['artifact', 'download', 'recompile', 'account'].includes(action) &&
+        (!['recompile', 'account'].includes(action) || resource === 'realms'))
+    );
   }
   if (method === 'DELETE') {
     return !!id && !action && ['builds', 'realms'].includes(resource);
@@ -30,7 +34,7 @@ export function allowedRoute(method, url) {
   }
   return (
     (resource === 'builds' && !id) ||
-    (!!id && (action === 'artifact' || (resource === 'realms' && ['start', 'stop', 'recompile'].includes(action))))
+    (!!id && (action === 'artifact' || (resource === 'realms' && ['start', 'stop', 'recompile', 'account'].includes(action))))
   );
 }
 
@@ -81,6 +85,23 @@ export function createGateway(options = {}) {
   const token = env.TC9_API_TOKEN ?? '';
   const configured = /^tc9_[A-Za-z0-9_]{20,256}$/.test(token);
   const signingKey = randomBytes(32);
+  const visitorKey = env.TC9_VISITOR_SECRET || createHmac('sha256', token).update('tc9-visitor-cookie-v1').digest('hex');
+  const visitorCookieName = secure ? '__Secure-tc9-player' : 'tc9-player-dev';
+  function visitorSignature(value) {
+    return createHmac('sha256', visitorKey).update(value).digest('hex');
+  }
+  function readVisitor(header) {
+    const value = header
+      ?.split(';')
+      .map((part) => part.trim())
+      .find((part) => part.startsWith(`${visitorCookieName}=`))
+      ?.slice(visitorCookieName.length + 1);
+    if (!value || !/^[a-f0-9]{64}\.[a-f0-9]{64}$/.test(value)) {
+      return null;
+    }
+    const [id, mac] = value.split('.');
+    return timingSafeEqual(Buffer.from(mac, 'hex'), Buffer.from(visitorSignature(id), 'hex')) ? id : null;
+  }
   const fetcher = options.fetch ?? fetch;
   function signature(value) {
     return createHmac('sha256', signingKey).update(value).digest('hex');
@@ -118,21 +139,22 @@ export function createGateway(options = {}) {
         return;
       }
       if (url.pathname === '/connection' && method === 'GET') {
-        if (connection) {
-          json(res, 200, { connected: true, ...connection });
-          return;
+        const cookies = [];
+        const csrf = connection?.csrf ?? randomBytes(24).toString('hex');
+        const expiresAt = connection?.expiresAt ?? Date.now() + TTL;
+        if (!connection) {
+          const value = `${csrf}.${expiresAt}`;
+          cookies.push(
+            `${cookieName}=${value}.${signature(value)}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=${TTL / 1000}${secure ? '; Secure' : ''}`,
+          );
         }
-        const csrf = randomBytes(24).toString('hex');
-        const expiresAt = Date.now() + TTL;
-        const value = `${csrf}.${expiresAt}`;
-        json(
-          res,
-          200,
-          { connected: true, csrf, expiresAt },
-          {
-            'Set-Cookie': `${cookieName}=${value}.${signature(value)}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=${TTL / 1000}${secure ? '; Secure' : ''}`,
-          },
-        );
+        if (!readVisitor(req.headers.cookie)) {
+          const visitor = randomBytes(32).toString('hex');
+          cookies.push(
+            `${visitorCookieName}=${visitor}.${visitorSignature(visitor)}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=15552000${secure ? '; Secure' : ''}`,
+          );
+        }
+        json(res, 200, { connected: true, csrf, expiresAt }, cookies.length ? { 'Set-Cookie': cookies } : {});
         return;
       }
       if (!connection) {
@@ -148,6 +170,14 @@ export function createGateway(options = {}) {
         return;
       }
       const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+      if (url.pathname.endsWith('/account')) {
+        const visitor = readVisitor(req.headers.cookie);
+        if (!visitor) {
+          json(res, 401, { error: 'Reload the Test Hub to recover your personal game account.' });
+          return;
+        }
+        headers['X-TC9-Account-Key'] = createHmac('sha256', visitorKey).update(`${url.pathname}:${visitor}`).digest('hex');
+      }
       let payload;
       if (method === 'POST') {
         payload = JSON.stringify(await body(req));

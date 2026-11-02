@@ -38,8 +38,16 @@ export interface Realm {
   realmlist_id?: number;
   progress_percent?: number;
   progress_detail?: string;
+  failure?: string;
   admin_username?: string;
   admin_password?: string;
+}
+export interface GameAccount {
+  realm_id: string;
+  state: 'pending' | 'ready' | 'failed';
+  username?: string;
+  password?: string;
+  error?: string;
 }
 export interface Artifact {
   state: 'waiting_for_build' | 'unavailable' | 'queued' | 'exporting' | 'failed' | 'ready';
@@ -49,6 +57,7 @@ export interface Artifact {
   artifact_size?: number;
 }
 export interface Phase {
+  failure?: string;
   state?: string;
   status?: string;
   progress_percent?: number;
@@ -198,7 +207,7 @@ export async function request<T>(
     credentials: 'same-origin',
     cache: 'no-store',
     body: options.data === undefined ? undefined : JSON.stringify(options.data),
-    signal: options.signal,
+    signal: AbortSignal.any([AbortSignal.timeout(90000), ...(options.signal ? [options.signal] : [])]),
   });
   let result: unknown = {};
   try {

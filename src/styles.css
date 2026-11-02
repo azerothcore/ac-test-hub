@@ -1024,3 +1024,19 @@ fieldset {
 .tc9-dialog progress { max-width: 150px; vertical-align: middle; accent-color: var(--gold); }
 .tc9-dialog button:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 600px) { .tc9-dialog { padding: 1rem; } .tc9-actions .button { flex-grow: 1; } }
+.run-options { align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
+.run-options__or { color: var(--muted); font-size: .8rem; font-weight: 700; padding: 0 .2rem; }
+.hosted-option { margin-bottom: 1rem; }
+.hosted-progress { border: 1px solid var(--line); border-radius: 7px; padding: 1rem; background: var(--surface-2); display: grid; gap: .8rem; margin: .7rem 0; }
+.hosted-progress p { margin: .2rem 0 .6rem; overflow-wrap: anywhere; }
+.hosted-progress progress { width: 100%; max-width: 100%; accent-color: var(--gold); }
+.hosted-progress .button { justify-self: start; }
+.hosted-progress[data-state=failed] { border-color: var(--red); }
+.tc9-build-options { border: 0; padding: 0; margin: 0; min-width: 0; display: grid; gap: 1rem; }
+@media (max-width: 600px) { .run-options .segmented__option { flex: 1 1 100%; } .run-options__or { margin-inline: auto; } }
+.tc9-build-options[hidden] { display: none; }
+.player-account { border-top: 1px solid var(--line); padding: 1rem 0; }
+.player-account h5 { font-size: 1rem; margin: 0; }
+.player-account__details { display: grid; grid-template-columns: auto 1fr; gap: .5rem 1rem; }
+.player-account__details dd { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: 0; }
+.player-account__details .copy { position: static; }
