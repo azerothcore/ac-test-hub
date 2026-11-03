@@ -13,7 +13,7 @@ The queue can be filtered by the part of the game a PR touches (class, instance,
 
 Self-hosted installations can opt into a TC9 compilation/provisioning service through a small Node.js gateway. A dedicated server-side token lets visitors compile selected PRs, follow progress and download built cores without entering personal API credentials. Realm management and separate in-game accounts are optional capabilities.
 
-The feature is **disabled by default**. The standard static site and GitHub Pages deployment retain the local server testing flow and require no backend. See [configuration and deployment](deploy/README.md) and [.env.example](.env.example) to enable hosted realms on your own infrastructure.
+The feature is **disabled by default**. For GitHub Pages, set the repository Actions variable `TC9_ENABLED=true` and run **Snapshot and deploy** to enable it; set it to `false` (or delete it) and rerun the workflow to disable it. The gateway must be configured separately before enabling. The standard static site and GitHub Pages deployment retain the local server testing flow and require no backend. See [configuration and deployment](deploy/README.md) and [.env.example](.env.example) to enable hosted realms on your own infrastructure.
 
 ## Why
 

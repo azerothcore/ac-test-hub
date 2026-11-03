@@ -2,6 +2,17 @@
 
 The default Test Hub is a static site, including on GitHub Pages. It requires no provisioning service and sends no gateway requests. Hosted compilation is an explicit opt-in for operators running a compatible TC9 developer API and a Node.js gateway beside the site.
 
+## Toggle on the production site
+
+The existing production Test Hub is [www.azerothcore.org/ac-test-hub/](https://www.azerothcore.org/ac-test-hub/). The Pages workflow keeps TC9 **off by default**, including when its repository variable is missing or has any value other than `true`.
+
+1. Configure and start the gateway as described below. For this site, use `TC9_PUBLIC_ORIGIN=https://www.azerothcore.org` and `TC9_COOKIE_PATH=/ac-test-hub/tc9-api/`. Route `https://www.azerothcore.org/ac-test-hub/tc9-api/` to that gateway through your domain's reverse proxy or edge; GitHub Pages itself cannot run Node or proxy this path. Keep the provider token and visitor secret only on the gateway host.
+2. In **Settings → Secrets and variables → Actions → Variables**, create the repository variable **`TC9_ENABLED`** with value **`true`**. This is a public feature flag, not a secret. No source edits or token in the build workflow are needed.
+3. Run **Actions → Snapshot and deploy → Run workflow**. Scheduled and push deployments also use the same variable.
+4. To disable TC9, set **`TC9_ENABLED=false`** (or remove it), then run **Snapshot and deploy** again. The resulting static build hides all hosted controls and makes no gateway requests. Allow the normal CDN cache to expire after deployment.
+
+Even with the flag enabled, hosted controls appear only after the gateway reports a configured shared account. A missing or unconfigured gateway leaves the local testing flow usable. If the provider is temporarily unavailable after the gateway was configured, the hosted dialog keeps its retry controls.
+
 ## Configure and build
 
 Use Node.js 24 (minimum 22.12). Run `npm ci`, then copy `.env.example` to `.env` (ignored by Git). Set:
@@ -17,7 +28,7 @@ TC9_ALLOW_MANAGEMENT=false
 TC9_PERSONAL_ACCOUNTS=false
 ```
 
-`VITE_TC9_ENABLED` is a **build-time** flag. Run `npm run build` after changing it. The remaining variables configure the gateway at runtime; restart it after changing them. GitHub Pages cannot run this gateway. Leave the feature disabled in the standard Pages workflow, or separately operate a gateway under the same public origin.
+`VITE_TC9_ENABLED` is a **build-time** flag. Run `npm run build` after changing it. The remaining variables configure the gateway at runtime; restart it after changing them. For the Pages workflow, the `TC9_ENABLED` repository variable supplies this build flag; a checkout `.env` is not needed in Actions. GitHub Pages cannot run this gateway; separately operate it under the same public origin before enabling the feature.
 
 Create a dedicated provider token with `read`, `build` and `download` scopes. All site visitors intentionally share its resources, without a website login or personal token entry. Public visitors can initiate compilations, so configure repository eligibility, concurrency, account quotas and rate limits at the provider before enabling a public site. Do not use an operator's general-purpose token.
 

@@ -46,6 +46,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
   const [sort, setSort] = useStoredState<{ key: SortKey }>('ac-test-hub:sort', { key: 'priority' });
   const [prefs, setPrefs] = useStoredState<ServerPrefs>('ac-test-hub:prefs', DEFAULT_PREFS);
   const [selected, select] = useHashSelection();
+  const [hostedConfigured, setHostedConfigured] = useState(false);
   const [provisionOpen, setProvisionOpen] = useState(false);
   const [hostedTasks, setHostedTasks] = useState<HostedTasks>({});
   const detailRef = useRef<HTMLDivElement>(null);
@@ -85,6 +86,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
             open={provisionOpen}
             onOpenChange={setProvisionOpen}
             onHostedChange={setHostedTasks}
+            onAvailabilityChange={setHostedConfigured}
           />
         )}
         <p className="masthead__meta">
@@ -121,7 +123,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
             prefs={prefs}
             onPrefsChange={setPrefs}
             onBack={() => select(null)}
-            hostedEnabled={HOSTED_ENABLED}
+            hostedEnabled={HOSTED_ENABLED && hostedConfigured}
             onProvision={() => setProvisionOpen(true)}
             hostedTask={hostedTasks[taskKey(snapshot.repository, current.number)]}
           />

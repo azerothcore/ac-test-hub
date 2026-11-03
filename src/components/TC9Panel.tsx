@@ -175,12 +175,14 @@ export function TC9Panel({
   open,
   onOpenChange,
   onHostedChange,
+  onAvailabilityChange,
 }: {
   repository: string;
   pull: PullSummary | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onHostedChange: (tasks: HostedTasks) => void;
+  onAvailabilityChange: (configured: boolean) => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [config, setConfig] = useState<TC9Config | null>(null);
@@ -242,15 +244,26 @@ export function TC9Panel({
     const controller = new AbortController();
     void request<TC9Config>('config', { signal: controller.signal })
       .then((value) => {
+        if (controller.signal.aborted) {
+          return;
+        }
         setConfig(value);
-        return request<Connection>('connection', { signal: controller.signal });
+        onAvailabilityChange(value.sharedAccount);
+        if (value.sharedAccount) {
+          return request<Connection>('connection', { signal: controller.signal })
+            .then(setConnection)
+            .catch(() => {
+              /* A configured gateway can offer a manual connection retry during an outage. */
+            });
+        }
       })
-      .then(setConnection)
       .catch(() => {
-        /* Static-only installations keep the local testing flow. */
+        if (!controller.signal.aborted) {
+          onAvailabilityChange(false);
+        }
       });
     return () => controller.abort();
-  }, []);
+  }, [onAvailabilityChange]);
   useEffect(() => {
     const element = dialog.current;
     if (!element) {
@@ -435,6 +448,9 @@ export function TC9Panel({
           document.body,
         )
       : null;
+  }
+  if (!config.sharedAccount) {
+    return null;
   }
   const eligible = !!pull && repositories.some((repo) => repo.id === repository);
   return (
