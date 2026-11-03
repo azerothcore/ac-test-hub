@@ -409,11 +409,15 @@ export function TC9Panel({
             onClose={() => onOpenChange(false)}
             aria-labelledby="tc9-unavailable"
           >
-            <h2 id="tc9-unavailable">Provisioning unavailable</h2>
-            <p>The optional TC9 gateway could not be reached. You can still use the local server instructions below.</p>
-            <button type="button" className="button" onClick={() => onOpenChange(false)}>
-              Close
-            </button>
+            <div className="tc9-dialog__heading">
+              <h2 id="tc9-unavailable">Provisioning unavailable</h2>
+              <button type="button" className="button" onClick={() => onOpenChange(false)}>
+                Close
+              </button>
+            </div>
+            <div className="tc9-dialog__body">
+              <p>The optional TC9 gateway could not be reached. You can still use the local server instructions below.</p>
+            </div>
           </dialog>,
           document.body,
         )
@@ -440,244 +444,228 @@ export function TC9Panel({
               Close
             </button>
           </div>
-          <p>
-            Provisioning service:{' '}
-            <a href={config.upstream} target="_blank" rel="noreferrer">
-              {config.upstream}
-            </a>
-          </p>
-          {error && (
-            <p className="notice tc9-error" role="alert">
-              {error}
-            </p>
-          )}
-          {message && (
-            <p className="notice" role="status">
-              {message}
-            </p>
-          )}
-          {!open ? null : !connection.connected ? (
-            <section className="tc9-card">
-              <h3>Test Hub connection unavailable</h3>
-              <p>
-                The site uses a shared provisioning account. No personal login or API token is needed. Retry the connection, or contact the
-                site operator if the problem continues.
+          <div className="tc9-dialog__body">
+            {error && (
+              <p className="notice tc9-error" role="alert">
+                {error}
               </p>
-              <button type="button" className="button" disabled={busy} onClick={connect}>
-                Retry connection
-              </button>
-            </section>
-          ) : (
-            <>
-              <div className="tc9-actions">
-                <strong>Shared Test Hub account</strong>
-                <button
-                  type="button"
-                  className="button button--quiet"
-                  disabled={busy}
-                  onClick={() => {
-                    retryUntil.current = 0;
-                    void refresh().catch(report);
-                  }}
-                >
-                  Refresh
+            )}
+            {message && (
+              <p className="notice" role="status">
+                {message}
+              </p>
+            )}
+            {!open ? null : !connection.connected ? (
+              <section className="tc9-card">
+                <h3>Test Hub connection unavailable</h3>
+                <p>
+                  The site uses a shared provisioning account. No personal login or API token is needed. Retry the connection, or contact
+                  the site operator if the problem continues.
+                </p>
+                <button type="button" className="button" disabled={busy} onClick={connect}>
+                  Retry connection
                 </button>
-              </div>
-              <p>All Test Hub visitors use this provisioning account and share the builds and realms below.</p>
-              <p role="status">
-                {status
-                  ? `${status.available ? 'Service available' : 'Service unavailable'} · ${status.queued_operations} queued · ${status.running_realms}/${status.max_running_realms} realms running`
-                  : 'Loading service capacity…'}
-                {status?.maintenance_message && ` · ${status.maintenance_message}`}
-              </p>
-              <section className="tc9-card" aria-labelledby="tc9-build-title">
-                <h3 id="tc9-build-title">{pull ? `Compile PR #${pull.number}` : 'Select a pull request to compile'}</h3>
-                {pull && (
-                  <>
-                    <p>
-                      {pull.title}
-                      <br />
-                      <small>{repository} · The service pins the current PR head at submission.</small>
-                    </p>
-                    {!eligible && (
-                      <p className="notice">
-                        This repository is unavailable for compilation with this account, or repository choices are still loading.
+              </section>
+            ) : (
+              <>
+                <p role="status">
+                  {status
+                    ? `${status.available ? 'Service available' : 'Service unavailable'} · ${status.queued_operations} queued · ${status.running_realms}/${status.max_running_realms} realms running`
+                    : 'Loading service capacity…'}
+                  {status?.maintenance_message && ` · ${status.maintenance_message}`}
+                </p>
+                <section className="tc9-card" aria-labelledby="tc9-build-title">
+                  <h3 id="tc9-build-title">{pull ? `Compile PR #${pull.number}` : 'Select a pull request to compile'}</h3>
+                  {pull && (
+                    <>
+                      <p>
+                        {pull.title}
+                        <br />
+                        <small>{repository} · The service pins the current PR head at submission.</small>
                       </p>
-                    )}
-                    {selectedTask && (
-                      <HostedProgress
-                        task={selectedTask}
-                        showAction={!selectedTask.intent && !canCompileAgain(selectedTask)}
-                        onOpen={() =>
-                          document
-                            .getElementById(
-                              selectedTask.build?.realm ? `tc9-realm-${selectedTask.build.realm.id}` : `tc9-build-${selectedTask.id}`,
-                            )
-                            ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-                        }
-                      />
-                    )}
-                    {(!selectedTask?.id || canCompileAgain(selectedTask)) && (
-                      <form
-                        className="tc9-form"
-                        onSubmit={(event) => {
-                          event.preventDefault();
-                          compile();
-                        }}
-                      >
-                        {selectedTask?.intent && (
-                          <p className="notice">
-                            The original request is preserved: server {selectedTask.intent.input.build_server}, modules{' '}
-                            {selectedTask.intent.input.modules.join(', ') || 'none'}, {selectedTask.intent.input.characters?.length ?? 0}{' '}
-                            test characters. Retrying checks or resumes this exact compilation.
-                          </p>
-                        )}
-                        <fieldset
-                          className="tc9-build-options"
-                          hidden={!!selectedTask?.intent}
-                          disabled={submissionPending || !!selectedTask?.intent}
+                      {!eligible && (
+                        <p className="notice">
+                          This repository is unavailable for compilation with this account, or repository choices are still loading.
+                        </p>
+                      )}
+                      {selectedTask && (
+                        <HostedProgress
+                          task={selectedTask}
+                          showAction={!selectedTask.intent && !canCompileAgain(selectedTask)}
+                          onOpen={() =>
+                            document
+                              .getElementById(
+                                selectedTask.build?.realm ? `tc9-realm-${selectedTask.build.realm.id}` : `tc9-build-${selectedTask.id}`,
+                              )
+                              ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+                          }
+                        />
+                      )}
+                      {(!selectedTask?.id || canCompileAgain(selectedTask)) && (
+                        <form
+                          className="tc9-form"
+                          onSubmit={(event) => {
+                            event.preventDefault();
+                            compile();
+                          }}
                         >
-                          <label>
-                            Compilation server
-                            <select value={server} onChange={(event) => setServer(event.target.value)}>
-                              <option value="auto">Automatic</option>
-                              {status?.build_servers.map((name) => (
-                                <option key={name} value={name}>
-                                  {name}
-                                </option>
-                              ))}
-                            </select>
-                          </label>
-                          <details>
-                            <summary>Optional modules ({selectedModules.length}/5)</summary>
-                            <label>
-                              Find a module
-                              <input type="search" value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} />
-                            </label>
-                            <fieldset className="tc9-modules">
-                              <legend>Approved modules</legend>
-                              {modules
-                                .filter((mod) => `${mod.name} ${mod.description}`.toLowerCase().includes(moduleFilter.toLowerCase()))
-                                .map((mod) => (
-                                  <label key={mod.name}>
-                                    <input
-                                      type="checkbox"
-                                      checked={selectedModules.includes(mod.name)}
-                                      disabled={!selectedModules.includes(mod.name) && selectedModules.length >= 5}
-                                      onChange={(event) =>
-                                        setSelectedModules(
-                                          event.target.checked
-                                            ? [...selectedModules, mod.name]
-                                            : selectedModules.filter((name) => name !== mod.name),
-                                        )
-                                      }
-                                    />
-                                    <span>
-                                      <strong>{mod.name}</strong>
-                                      <small>{mod.description}</small>
-                                    </span>
-                                  </label>
-                                ))}
-                            </fieldset>
-                          </details>
-                          <details>
-                            <summary>Optional test characters, items & quests</summary>
-                            <p>
-                              Up to three characters. Leave [] for none. Valid race/class combinations, level 1–80, gold 0–10000. Items use{' '}
-                              {`{"id":6948,"count":1}`}; quest fields are active_quests and completed_quests (arrays of IDs, 25 combined).
+                          {selectedTask?.intent && (
+                            <p className="notice">
+                              The original request is preserved: server {selectedTask.intent.input.build_server}, modules{' '}
+                              {selectedTask.intent.input.modules.join(', ') || 'none'}, {selectedTask.intent.input.characters?.length ?? 0}{' '}
+                              test characters. Retrying checks or resumes this exact compilation.
                             </p>
-                            <button type="button" className="button button--quiet" onClick={() => setCharacters(CHARACTER_EXAMPLE)}>
-                              Use level 80 tester example
-                            </button>
+                          )}
+                          <fieldset
+                            className="tc9-build-options"
+                            hidden={!!selectedTask?.intent}
+                            disabled={submissionPending || !!selectedTask?.intent}
+                          >
                             <label>
-                              Character configuration (JSON)
-                              <textarea
-                                rows={7}
-                                spellCheck={false}
-                                value={characters}
-                                onChange={(event) => setCharacters(event.target.value)}
-                              />
+                              Compilation server
+                              <select value={server} onChange={(event) => setServer(event.target.value)}>
+                                <option value="auto">Automatic</option>
+                                {status?.build_servers.map((name) => (
+                                  <option key={name} value={name}>
+                                    {name}
+                                  </option>
+                                ))}
+                              </select>
                             </label>
-                          </details>
-                        </fieldset>
+                            <details>
+                              <summary>Optional modules ({selectedModules.length}/5)</summary>
+                              <label>
+                                Find a module
+                                <input type="search" value={moduleFilter} onChange={(event) => setModuleFilter(event.target.value)} />
+                              </label>
+                              <fieldset className="tc9-modules">
+                                <legend>Approved modules</legend>
+                                {modules
+                                  .filter((mod) => `${mod.name} ${mod.description}`.toLowerCase().includes(moduleFilter.toLowerCase()))
+                                  .map((mod) => (
+                                    <label key={mod.name}>
+                                      <input
+                                        type="checkbox"
+                                        checked={selectedModules.includes(mod.name)}
+                                        disabled={!selectedModules.includes(mod.name) && selectedModules.length >= 5}
+                                        onChange={(event) =>
+                                          setSelectedModules(
+                                            event.target.checked
+                                              ? [...selectedModules, mod.name]
+                                              : selectedModules.filter((name) => name !== mod.name),
+                                          )
+                                        }
+                                      />
+                                      <span>
+                                        <strong>{mod.name}</strong>
+                                        <small>{mod.description}</small>
+                                      </span>
+                                    </label>
+                                  ))}
+                              </fieldset>
+                            </details>
+                            <details>
+                              <summary>Optional test characters, items & quests</summary>
+                              <p>
+                                Up to three characters. Leave [] for none. Valid race/class combinations, level 1–80, gold 0–10000. Items
+                                use {`{"id":6948,"count":1}`}; quest fields are active_quests and completed_quests (arrays of IDs, 25
+                                combined).
+                              </p>
+                              <button type="button" className="button button--quiet" onClick={() => setCharacters(CHARACTER_EXAMPLE)}>
+                                Use level 80 tester example
+                              </button>
+                              <label>
+                                Character configuration (JSON)
+                                <textarea
+                                  rows={7}
+                                  spellCheck={false}
+                                  value={characters}
+                                  onChange={(event) => setCharacters(event.target.value)}
+                                />
+                              </label>
+                            </details>
+                          </fieldset>
+                          <button
+                            type="submit"
+                            className="button button--primary"
+                            disabled={
+                              busy || submissionPending || retryIn > 0 || !eligible || !status?.available || !status.builds_available
+                            }
+                          >
+                            {submissionPending
+                              ? 'Submitting…'
+                              : retryIn > 0
+                                ? `Retry in ${retryIn}s`
+                                : selectedTask?.intent
+                                  ? 'Retry same submission'
+                                  : canCompileAgain(selectedTask)
+                                    ? 'Compile again'
+                                    : 'Compile & create realm'}
+                          </button>
+                        </form>
+                      )}
+                    </>
+                  )}
+                </section>
+                <section aria-labelledby="tc9-builds">
+                  <h3 id="tc9-builds">Test Hub builds ({builds.total})</h3>
+                  {builds.builds.length === 0 && <p>No builds on this page.</p>}
+                  {builds.builds.map((build) => (
+                    <article key={build.id} id={`tc9-build-${build.id}`} className="tc9-card">
+                      <h4>
+                        {build.repository} #{build.pr_number} <span className="tag">{build.status}</span>
+                      </h4>
+                      <p>
+                        <code>{build.id}</code> · Revision <code>{build.sha?.slice(0, 12) || 'pending'}</code>
+                        <br />
+                        Modules: {build.modules?.join(', ') || 'none'} · {new Date(build.created_at).toLocaleString()}
+                      </p>
+                      <Progress label="Compilation" phase={build.build} />
+                      <Progress label="Database" phase={build.database} />
+                      <Progress label="Realm" phase={build.realm ?? undefined} />
+                      {build.error && <p className="tc9-error">{build.error}</p>}
+                      {build.status === 'queued' && build.queue_expires_at && (
+                        <p>Queue expires: {new Date(build.queue_expires_at).toLocaleString()}</p>
+                      )}
+                      {!['completed', 'deleted', 'failed', 'expired'].includes(build.status) && (
                         <button
-                          type="submit"
-                          className="button button--primary"
-                          disabled={busy || submissionPending || retryIn > 0 || !eligible || !status?.available || !status.builds_available}
+                          type="button"
+                          className="button"
+                          disabled={busy}
+                          onClick={() =>
+                            act(
+                              `v1/builds/${encodeURIComponent(build.id)}`,
+                              'DELETE',
+                              'Cancel this build and clean up its related realm resources?',
+                            )
+                          }
                         >
-                          {submissionPending
-                            ? 'Submitting…'
-                            : retryIn > 0
-                              ? `Retry in ${retryIn}s`
-                              : selectedTask?.intent
-                                ? 'Retry same submission'
-                                : canCompileAgain(selectedTask)
-                                  ? 'Compile again'
-                                  : 'Compile & create realm'}
+                          Cancel build
                         </button>
-                      </form>
-                    )}
-                  </>
-                )}
-              </section>
-              <section aria-labelledby="tc9-builds">
-                <h3 id="tc9-builds">Test Hub builds ({builds.total})</h3>
-                {builds.builds.length === 0 && <p>No builds on this page.</p>}
-                {builds.builds.map((build) => (
-                  <article key={build.id} id={`tc9-build-${build.id}`} className="tc9-card">
-                    <h4>
-                      {build.repository} #{build.pr_number} <span className="tag">{build.status}</span>
-                    </h4>
-                    <p>
-                      <code>{build.id}</code> · Revision <code>{build.sha?.slice(0, 12) || 'pending'}</code>
-                      <br />
-                      Modules: {build.modules?.join(', ') || 'none'} · {new Date(build.created_at).toLocaleString()}
-                    </p>
-                    <Progress label="Compilation" phase={build.build} />
-                    <Progress label="Database" phase={build.database} />
-                    <Progress label="Realm" phase={build.realm ?? undefined} />
-                    {build.error && <p className="tc9-error">{build.error}</p>}
-                    {build.status === 'queued' && build.queue_expires_at && (
-                      <p>Queue expires: {new Date(build.queue_expires_at).toLocaleString()}</p>
-                    )}
-                    {!['completed', 'deleted', 'failed', 'expired'].includes(build.status) && (
-                      <button
-                        type="button"
-                        className="button"
-                        disabled={busy}
-                        onClick={() =>
-                          act(
-                            `v1/builds/${encodeURIComponent(build.id)}`,
-                            'DELETE',
-                            'Cancel this build and clean up its related realm resources?',
-                          )
-                        }
-                      >
-                        Cancel build
-                      </button>
-                    )}
-                    <Archive kind="builds" id={build.id} csrf={csrf} report={report} />
-                  </article>
-                ))}
-                <div className="tc9-actions">
-                  <button type="button" className="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>
-                    Previous builds
-                  </button>
-                  <span>Page {Math.floor(offset / 20) + 1}</span>
-                  <button type="button" className="button" disabled={offset + 20 >= builds.total} onClick={() => setOffset(offset + 20)}>
-                    Next builds
-                  </button>
-                </div>
-              </section>
-              <section aria-labelledby="tc9-realms">
-                <h3 id="tc9-realms">Test Hub realms ({realms.length})</h3>
-                {realms.length === 0 && <p>No shared realms yet. Submit a PR build above to create one.</p>}
-                {realms.map((realm) => (
-                  <RealmCard key={realm.id} realm={realm} csrf={csrf} act={act} busy={busy || submissionPending} report={report} />
-                ))}
-              </section>
-            </>
-          )}
+                      )}
+                      <Archive kind="builds" id={build.id} csrf={csrf} report={report} />
+                    </article>
+                  ))}
+                  <div className="tc9-actions">
+                    <button type="button" className="button" disabled={offset === 0} onClick={() => setOffset(Math.max(0, offset - 20))}>
+                      Previous builds
+                    </button>
+                    <span>Page {Math.floor(offset / 20) + 1}</span>
+                    <button type="button" className="button" disabled={offset + 20 >= builds.total} onClick={() => setOffset(offset + 20)}>
+                      Next builds
+                    </button>
+                  </div>
+                </section>
+                <section aria-labelledby="tc9-realms">
+                  <h3 id="tc9-realms">Test Hub realms ({realms.length})</h3>
+                  {realms.length === 0 && <p>No shared realms yet. Submit a PR build above to create one.</p>}
+                  {realms.map((realm) => (
+                    <RealmCard key={realm.id} realm={realm} csrf={csrf} act={act} busy={busy || submissionPending} report={report} />
+                  ))}
+                </section>
+              </>
+            )}
+          </div>
         </dialog>,
         document.body,
       )}

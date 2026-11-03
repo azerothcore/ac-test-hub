@@ -1000,11 +1000,15 @@ fieldset {
 
 /* Optional same-origin TC9 provisioning gateway. */
 .tc9-launcher { margin-top: .75rem; }
-.tc9-dialog { width: min(960px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); box-sizing: border-box; padding: 1.5rem; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); overflow: auto; }
+.tc9-dialog { width: min(960px, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); box-sizing: border-box; padding: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); color: var(--text); overflow: hidden; }
+.tc9-dialog[open] { display: flex; flex-direction: column; }
+.tc9-dialog__body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 1.5rem; }
 .tc9-dialog::backdrop { background: #000a; }
 .tc9-dialog__heading, .tc9-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .65rem; }
-.tc9-dialog__heading { justify-content: space-between; }
+.tc9-dialog__heading { flex: 0 0 auto; flex-wrap: nowrap; justify-content: space-between; align-items: center; padding: 1rem 1.5rem; border-bottom: 1px solid var(--line); background: var(--bg); }
+.tc9-dialog__heading > .button { flex-shrink: 0; }
 .tc9-dialog h2, .tc9-dialog h3, .tc9-dialog h4 { margin: .3rem 0 .8rem; }
+.tc9-dialog .tc9-dialog__heading h2 { margin: 0; min-width: 0; }
 .tc9-dialog p { line-height: 1.6; overflow-wrap: anywhere; }
 .tc9-dialog a { color: var(--gold); }
 .tc9-dialog section { margin-top: 1.5rem; }
@@ -1023,7 +1027,7 @@ fieldset {
 .tc9-archive { margin-top: .8rem; }
 .tc9-dialog progress { max-width: 150px; vertical-align: middle; accent-color: var(--gold); }
 .tc9-dialog button:disabled { opacity: .5; cursor: not-allowed; }
-@media (max-width: 600px) { .tc9-dialog { padding: 1rem; } .tc9-actions .button { flex-grow: 1; } }
+@media (max-width: 600px) { .tc9-dialog__heading, .tc9-dialog__body { padding: 1rem; } .tc9-actions .button { flex-grow: 1; } }
 .run-options { align-items: center; flex-wrap: wrap; margin-bottom: 1rem; }
 .run-options__or { color: var(--muted); font-size: .8rem; font-weight: 700; padding: 0 .2rem; }
 .hosted-option { margin-bottom: 1rem; }
