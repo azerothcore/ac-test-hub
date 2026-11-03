@@ -1,3 +1,4 @@
+import type { HostedTask } from '../lib/hosted';
 import type { ServerPrefs } from '../lib/commands';
 import { wantsTesters } from '../lib/queue';
 import type { PullSummary } from '../lib/types';
@@ -14,10 +15,13 @@ interface Props {
   prefs: ServerPrefs;
   onPrefsChange: (prefs: ServerPrefs) => void;
   onBack: () => void;
+  hostedEnabled?: boolean;
+  onProvision: () => void;
+  hostedTask?: HostedTask;
 }
 
 /** One pull request: what it is, then the three steps to test it. */
-export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack }: Props) {
+export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onProvision, hostedTask, hostedEnabled = false }: Props) {
   const { testing } = pull;
   const area = areaText(pull.area);
 
@@ -46,7 +50,11 @@ export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack }: P
               {STATUS_TEXT[pull.status]}
             </span>
           )}
-          {wantsTesters(pull) && pull.status !== 'waiting' && <span className="tag" data-wanted>Asking for testers</span>}
+          {wantsTesters(pull) && pull.status !== 'waiting' && (
+            <span className="tag" data-wanted>
+              Asking for testers
+            </span>
+          )}
           {testing.testedByAuthor && <span className="tag">Tested by the author</span>}
           {testing.testedByOthers && <span className="tag">Tested by others</span>}
         </div>
@@ -82,7 +90,15 @@ export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack }: P
 
       <ol className="steps">
         <ReadStep pull={pull} repository={repository} />
-        <RunStep pull={pull} prefs={prefs} onPrefsChange={onPrefsChange} />
+        <RunStep
+          key={`${repository}#${pull.number}`}
+          pull={pull}
+          prefs={prefs}
+          onPrefsChange={onPrefsChange}
+          hostedEnabled={hostedEnabled}
+          onProvision={onProvision}
+          hostedTask={hostedTask}
+        />
         <ReportStep pull={pull} repository={repository} prefs={prefs} onPrefsChange={onPrefsChange} />
       </ol>
     </article>

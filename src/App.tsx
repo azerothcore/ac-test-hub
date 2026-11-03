@@ -1,13 +1,26 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { HOSTED_ENABLED } from './lib/tc9';
+import { TC9Panel } from './components/TC9Panel';
 import { ExternalLink } from './components/ExternalLink';
 import { PullDetail } from './components/PullDetail';
 import { PullList } from './components/PullList';
 import { QueueFilters } from './components/QueueFilters';
 import { timeAgo } from './format';
 import { useHashSelection, useSnapshot, useStoredState } from './hooks';
+import { taskKey } from './lib/hosted';
+import type { HostedTasks } from './lib/hosted';
 import type { ServerPrefs } from './lib/commands';
 import { WIKI } from './lib/config';
-import { DEFAULT_FILTERS, domainOptions, filterPulls, reportCount, sortPulls, wantsTesters, type QueueFilters as Filters, type SortKey } from './lib/queue';
+import {
+  DEFAULT_FILTERS,
+  domainOptions,
+  filterPulls,
+  reportCount,
+  sortPulls,
+  wantsTesters,
+  type QueueFilters as Filters,
+  type SortKey,
+} from './lib/queue';
 import type { Snapshot } from './lib/types';
 
 const DEFAULT_PREFS: ServerPrefs = { setup: 'docker', fork: false, os: '' };
@@ -22,8 +35,8 @@ function Summary({ snapshot }: { snapshot: Snapshot }) {
   return (
     <p className="masthead__lede">
       {wanted.length} open pull requests are asking for testers
-      {labelled > 0 && ` (${labelled} labelled “Waiting to be Tested”)`}, and {unreported} of them have no report yet. Pick one,
-      run it on your server, post what you saw.
+      {labelled > 0 && ` (${labelled} labelled “Waiting to be Tested”)`}, and {unreported} of them have no report yet. Pick one, run it on
+      your server, post what you saw.
     </p>
   );
 }
@@ -33,6 +46,9 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
   const [sort, setSort] = useStoredState<{ key: SortKey }>('ac-test-hub:sort', { key: 'priority' });
   const [prefs, setPrefs] = useStoredState<ServerPrefs>('ac-test-hub:prefs', DEFAULT_PREFS);
   const [selected, select] = useHashSelection();
+  const [hostedConfigured, setHostedConfigured] = useState(false);
+  const [provisionOpen, setProvisionOpen] = useState(false);
+  const [hostedTasks, setHostedTasks] = useState<HostedTasks>({});
   const detailRef = useRef<HTMLDivElement>(null);
 
   const visible = useMemo(() => sortPulls(filterPulls(snapshot.pulls, filters), sort.key), [snapshot, filters, sort.key]);
@@ -63,6 +79,16 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
           <p className="masthead__for">for AzerothCore pull requests</p>
         </div>
         <Summary snapshot={snapshot} />
+        {HOSTED_ENABLED && (
+          <TC9Panel
+            repository={snapshot.repository}
+            pull={current}
+            open={provisionOpen}
+            onOpenChange={setProvisionOpen}
+            onHostedChange={setHostedTasks}
+            onAvailabilityChange={setHostedConfigured}
+          />
+        )}
         <p className="masthead__meta">
           {sample ? (
             <strong className="sample-flag">Made-up sample data</strong>
@@ -91,7 +117,16 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
 
       <main className="detail-pane" ref={detailRef}>
         {current ? (
-          <PullDetail pull={current} repository={snapshot.repository} prefs={prefs} onPrefsChange={setPrefs} onBack={() => select(null)} />
+          <PullDetail
+            pull={current}
+            repository={snapshot.repository}
+            prefs={prefs}
+            onPrefsChange={setPrefs}
+            onBack={() => select(null)}
+            hostedEnabled={HOSTED_ENABLED && hostedConfigured}
+            onProvision={() => setProvisionOpen(true)}
+            hostedTask={hostedTasks[taskKey(snapshot.repository, current.number)]}
+          />
         ) : selected !== null ? (
           <div className="empty">
             <p>#{selected} isn't an open pull request any more, or isn't in this snapshot.</p>
@@ -106,9 +141,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
         )}
       </main>
 
-      <footer className="colophon">
-        Data from the GitHub API, refreshed every 30 minutes.
-      </footer>
+      <footer className="colophon">Data from the GitHub API, refreshed every 30 minutes.</footer>
     </div>
   );
 }

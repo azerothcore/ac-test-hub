@@ -16,8 +16,9 @@
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "lint": "oxlint --deny-warnings",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest run && node --test server/*.test.mjs",
+    "test:watch": "vitest",
+    "serve:api": "node --env-file-if-exists=.env server/gateway.mjs"
   },
   "dependencies": {
     "react": "^19.3.1",

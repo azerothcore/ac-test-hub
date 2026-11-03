@@ -63,7 +63,10 @@ jobs:
           PREVIOUS_SNAPSHOT_URL: ${{ steps.pages.outputs.base_url }}/data.json
           FULL_REFRESH: ${{ github.event.schedule == '22 3 * * *' || inputs.full_refresh == true }}
 
-      - run: npm run build
+      - name: Build site (TC9 is off unless explicitly enabled)
+        run: npm run build
+        env:
+          VITE_TC9_ENABLED: ${{ vars.TC9_ENABLED || 'false' }}
 
       - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
         with:

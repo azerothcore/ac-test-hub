@@ -9,6 +9,12 @@ A page that lists the open [AzerothCore](https://github.com/azerothcore/azerothc
 
 The queue can be filtered by the part of the game a PR touches (class, instance, level range, code area), so testers find the PRs they know how to test.
 
+## Compile and provision test realms
+
+Self-hosted installations can opt into a TC9 compilation/provisioning service through a small Node.js gateway. A dedicated server-side token lets visitors compile selected PRs, follow progress and download built cores without entering personal API credentials. Realm management and separate in-game accounts are optional capabilities.
+
+The feature is **disabled by default**. For GitHub Pages, set the repository Actions variable `TC9_ENABLED=true` and run **Snapshot and deploy** to enable it; set it to `false` (or delete it) and rerun the workflow to disable it. The gateway must be configured separately before enabling. The standard static site and GitHub Pages deployment retain the local server testing flow and require no backend. See [configuration and deployment](deploy/README.md) and [.env.example](.env.example) to enable hosted realms on your own infrastructure.
+
 ## Why
 
 [Testing is how a PR reaches `master`](https://www.azerothcore.org/wiki/how-to-test-a-pr), and anyone who can run a server can help. The [Waiting to be Tested](https://github.com/azerothcore/azerothcore-wotlk/pulls?q=is%3Apr+is%3Aopen+label%3A%22Waiting+to+be+Tested%22) label alone shows very few of the [open PRs](https://github.com/azerothcore/azerothcore-wotlk/pulls?q=is%3Apr+is%3Aopen) (2 of 133 on 15 October 2026). The [PR template](https://github.com/azerothcore/azerothcore-wotlk/blob/master/pull_request_template.md) also has a "This pull request requires further testing" box. The hub lists both kinds of PR and puts them first.
@@ -22,7 +28,7 @@ GitHub Actions, every 30 minutes
         └── previous data.json from the site: PRs that did not change are not fetched again
 ```
 
-There is no server and no token in the browser. A scheduled workflow reads public data with its own token, writes one JSON file and publishes a static site. If the search for open PRs fails, nothing is deployed and the previous site stays up; if a single PR's details can't be read, that PR keeps what the previous snapshot knew.
+The PR queue has no token in the browser. A scheduled workflow reads public data with its own token, writes one JSON file and publishes a static site. The hub also supports an optional self-hosted TC9 gateway for shared compilation and realm management (see the deployment guide). If the search for open PRs fails, nothing is deployed and the previous site stays up; if a single PR's details can't be read, that PR keeps what the previous snapshot knew.
 
 The snapshot reuses the details of every PR whose `updated_at` did not change since the previous one, so most runs make only a few requests. Once a day it fetches everything again, which also picks up labels added to linked issues in the meantime.
 
