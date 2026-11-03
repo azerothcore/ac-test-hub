@@ -18,7 +18,7 @@ function Progress({ label, phase }: { label: string; phase?: Phase }) {
   return (
     <p>
       {label}: {phase.state ?? phase.status ?? 'pending'}
-      {phase.progress_percent !== undefined && (
+      {phase.progress_percent !== undefined && phase.progress_percent >= 0 && (
         <>
           {' '}
           <progress value={phase.progress_percent} max={100} /> {phase.progress_percent}%
@@ -100,7 +100,9 @@ function RealmCard({
   act,
   busy,
   report,
+  capabilities,
 }: {
+  capabilities: TC9Config['capabilities'];
   realm: Realm;
   csrf: string;
   act: (path: string, method: string, question?: string) => void;
@@ -130,36 +132,38 @@ function RealmCard({
           {realm.realmlist_id && <> · Realm ID {realm.realmlist_id}</>}
         </p>
       )}
-      <PlayerAccount realm={realm} csrf={csrf} />
-      <div className="tc9-actions">
-        <button className="button" type="button" disabled={busy || !stopped} onClick={() => act(`${path}/start`, 'POST')}>
-          Start
-        </button>
-        <button
-          className="button"
-          type="button"
-          disabled={busy || realm.state !== 'running'}
-          onClick={() => act(`${path}/stop`, 'POST', 'Stop this test realm?')}
-        >
-          Stop
-        </button>
-        <button
-          className="button"
-          type="button"
-          disabled={busy || !stopped}
-          onClick={() => act(`${path}/recompile`, 'POST', 'Compile the latest PR revision and update this stopped realm?')}
-        >
-          Recompile latest PR
-        </button>
-        <button
-          className="button"
-          type="button"
-          disabled={busy || realm.state === 'deleting' || realm.state === 'deleted'}
-          onClick={() => act(path, 'DELETE', 'Delete this realm and its databases? This cannot be undone.')}
-        >
-          Delete realm
-        </button>
-      </div>
+      {capabilities.personalAccounts && <PlayerAccount realm={realm} csrf={csrf} />}
+      {capabilities.management && (
+        <div className="tc9-actions">
+          <button className="button" type="button" disabled={busy || !stopped} onClick={() => act(`${path}/start`, 'POST')}>
+            Start
+          </button>
+          <button
+            className="button"
+            type="button"
+            disabled={busy || realm.state !== 'running'}
+            onClick={() => act(`${path}/stop`, 'POST', 'Stop this test realm?')}
+          >
+            Stop
+          </button>
+          <button
+            className="button"
+            type="button"
+            disabled={busy || !stopped}
+            onClick={() => act(`${path}/recompile`, 'POST', 'Compile the latest PR revision and update this stopped realm?')}
+          >
+            Recompile latest PR
+          </button>
+          <button
+            className="button"
+            type="button"
+            disabled={busy || realm.state === 'deleting' || realm.state === 'deleted'}
+            onClick={() => act(path, 'DELETE', 'Delete this realm and its databases? This cannot be undone.')}
+          >
+            Delete realm
+          </button>
+        </div>
+      )}
       <Archive key={realm.commit_sha} kind="realms" id={realm.id} csrf={csrf} report={report} />
     </article>
   );
@@ -196,7 +200,7 @@ export function TC9Panel({
   const [characters, setCharacters] = useState('[]');
   const actionPending = useRef(false);
   const selectedKey = pull ? taskKey(repository, pull.number) : null;
-  const { tracker, tasks } = useHostedBuilds(connection.connected, selectedKey);
+  const { tracker, tasks } = useHostedBuilds(connection.connected, selectedKey, config?.instance);
   const selectedTask = selectedKey ? tasks[selectedKey] : undefined;
   const submissionPending = !!selectedTask?.submitting;
   const [now, setNow] = useState(() => Date.now());
@@ -270,7 +274,9 @@ export function TC9Panel({
       setBuilds(page);
       setRealms(ownedRealms);
       for (const build of page.builds) {
-        tracker.accept(build);
+        if (tracker.snapshot()[taskKey(build.repository, build.pr_number)]?.id === build.id) {
+          tracker.accept(build);
+        }
       }
     },
     [offset, tracker],
@@ -371,6 +377,13 @@ export function TC9Panel({
     }
     const again = canCompileAgain(selectedTask);
     if (selectedTask?.id && !again) {
+      return;
+    }
+    if (
+      again &&
+      selectedTask?.build?.status === 'completed' &&
+      !window.confirm('Create another realm for the current PR revision and these options? The existing realm will remain in the library.')
+    ) {
       return;
     }
     let input: BuildInput;
@@ -481,7 +494,9 @@ export function TC9Panel({
                       <p>
                         {pull.title}
                         <br />
-                        <small>{repository} · The service pins the current PR head at submission.</small>
+                        <small>
+                          {repository} · Fresh builds pin the PR head. Identical in-flight requests may share an existing pinned build.
+                        </small>
                       </p>
                       {!eligible && (
                         <p className="notice">
@@ -500,6 +515,12 @@ export function TC9Panel({
                               ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
                           }
                         />
+                      )}
+                      {selectedTask?.build?.status === 'completed' && (
+                        <p className="notice">
+                          This PR already has a ready realm. Compile again only to test a newer revision or different options; this creates
+                          another realm.
+                        </p>
                       )}
                       {(!selectedTask?.id || canCompileAgain(selectedTask)) && (
                         <form
@@ -627,22 +648,23 @@ export function TC9Panel({
                       {build.status === 'queued' && build.queue_expires_at && (
                         <p>Queue expires: {new Date(build.queue_expires_at).toLocaleString()}</p>
                       )}
-                      {!['completed', 'deleted', 'failed', 'expired'].includes(build.status) && (
-                        <button
-                          type="button"
-                          className="button"
-                          disabled={busy}
-                          onClick={() =>
-                            act(
-                              `v1/builds/${encodeURIComponent(build.id)}`,
-                              'DELETE',
-                              'Cancel this build and clean up its related realm resources?',
-                            )
-                          }
-                        >
-                          Cancel build
-                        </button>
-                      )}
+                      {config.capabilities.management &&
+                        !['completed', 'deleted', 'failed', 'expired', 'cancelled', 'canceled'].includes(build.status) && (
+                          <button
+                            type="button"
+                            className="button"
+                            disabled={busy}
+                            onClick={() =>
+                              act(
+                                `v1/builds/${encodeURIComponent(build.id)}`,
+                                'DELETE',
+                                'Cancel this build and clean up its related realm resources?',
+                              )
+                            }
+                          >
+                            Cancel build
+                          </button>
+                        )}
                       <Archive kind="builds" id={build.id} csrf={csrf} report={report} />
                     </article>
                   ))}
@@ -660,7 +682,15 @@ export function TC9Panel({
                   <h3 id="tc9-realms">Test Hub realms ({realms.length})</h3>
                   {realms.length === 0 && <p>No shared realms yet. Submit a PR build above to create one.</p>}
                   {realms.map((realm) => (
-                    <RealmCard key={realm.id} realm={realm} csrf={csrf} act={act} busy={busy || submissionPending} report={report} />
+                    <RealmCard
+                      capabilities={config.capabilities}
+                      key={realm.id}
+                      realm={realm}
+                      csrf={csrf}
+                      act={act}
+                      busy={busy || submissionPending}
+                      report={report}
+                    />
                   ))}
                 </section>
               </>

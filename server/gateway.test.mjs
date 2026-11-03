@@ -11,6 +11,7 @@ let cookie;
 let csrf;
 const seen = [];
 let upstreamStatus = 200;
+let unsafeResponse = false;
 
 before(async () => {
   gateway = createGateway({
@@ -19,9 +20,14 @@ before(async () => {
       TC9_PUBLIC_ORIGIN: origin,
       TC9_COOKIE_PATH: '/test-hub/tc9-api/',
       TC9_API_TOKEN: token,
+      TC9_PERSONAL_ACCOUNTS: 'true',
+      TC9_VISITOR_SECRET: 'a'.repeat(64),
     },
     fetch: async (url, options) => {
       seen.push({ url, ...options });
+      if (unsafeResponse) {
+        return new Response('<script>alert(1)</script>', { headers: { 'Content-Type': 'text/html' } });
+      }
       if (upstreamStatus !== 200) {
         return Response.json({ error: 'scope or authentication failure' }, { status: upstreamStatus, headers: { 'Retry-After': '19' } });
       }
@@ -65,7 +71,17 @@ function call(path, options = {}) {
 
 test('public configuration discloses only the shared account availability, never its credential', async () => {
   const config = await call('/config');
-  assert.deepEqual(await config.json(), { upstream: 'https://tc9.example', sharedAccount: true });
+  const value = await config.json();
+  assert.match(value.instance, /^[a-f0-9]{24}$/);
+  assert.deepEqual(
+    { ...value, instance: undefined },
+    {
+      upstream: 'https://tc9.example',
+      sharedAccount: true,
+      instance: undefined,
+      capabilities: { management: false, personalAccounts: true },
+    },
+  );
   assert.equal(config.headers.get('cache-control'), 'no-store');
   assert.equal((await call('/v1/status')).status, 401);
 });
@@ -116,13 +132,13 @@ test('mutations require both same origin and CSRF, and preserve idempotency', as
   assert.equal(seen.at(-1).headers['Idempotency-Key'], 'stable-intent-42');
   assert.equal(seen.at(-1).headers['X-TC9-Reuse-Active'], 'true');
   assert.deepEqual(JSON.parse(seen.at(-1).body), input);
-  assert.equal((await call('/v1/builds', { method: 'POST', body: JSON.stringify({ input: 'x'.repeat(65536) }) })).status, 400);
+  assert.equal((await call('/v1/builds', { method: 'POST', body: JSON.stringify({ input: 'x'.repeat(65536) }) })).status, 413);
 });
 test('archive download streams authenticated range responses with no credential in the URL', async () => {
   const response = await call('/v1/builds/build-1/download', { headers: { Range: 'bytes=0-12' } });
   assert.equal(response.status, 206);
   assert.equal(await response.text(), 'archive-chunk');
-  assert.equal(response.headers.get('content-disposition'), 'attachment; filename=core.zip');
+  assert.equal(response.headers.get('content-disposition'), 'attachment; filename="core.zip"');
   assert.equal(response.headers.get('content-range'), 'bytes 0-12/100');
   assert.equal(seen.at(-1).headers.Range, 'bytes=0-12');
   assert.ok(!seen.at(-1).url.includes(token));
@@ -210,4 +226,123 @@ test('game accounts use separate private visitor keys while API authentication r
   assert.equal(seen.at(-1).headers['X-TC9-Account-Key'], keyA);
   assert.equal((await call('/v1/realms/realm-1/account', { headers: { Cookie: cookie } })).status, 401);
   assert.equal(allowedRoute('GET', new URL('/v1/builds/build-1/account', base)), false);
+});
+
+test('default capabilities reject destructive operations even when visitors call the gateway directly', async () => {
+  const count = seen.length;
+  for (const [path, method] of [
+    ['/v1/builds/build-1', 'DELETE'],
+    ['/v1/realms/realm-1', 'DELETE'],
+    ['/v1/realms/realm-1/start', 'POST'],
+    ['/v1/realms/realm-1/stop', 'POST'],
+    ['/v1/realms/realm-1/recompile', 'POST'],
+  ]) {
+    assert.equal((await call(path, { method, ...(method === 'POST' ? { body: '{}' } : {}) })).status, 403);
+  }
+  assert.equal(seen.length, count);
+});
+test('active upstream content cannot run under the Test Hub origin', async () => {
+  unsafeResponse = true;
+  try {
+    const api = await call('/v1/status');
+    assert.equal(api.status, 502);
+    assert.doesNotMatch(await api.text(), /<script>/);
+    const download = await call('/v1/builds/id/download');
+    assert.equal(download.headers.get('content-type'), 'application/octet-stream');
+    assert.equal(download.headers.get('content-disposition'), 'attachment; filename="core.zip"');
+    assert.equal(seen.at(-1).headers['Accept-Encoding'], 'identity');
+    await download.text();
+  } finally {
+    unsafeResponse = false;
+  }
+});
+test('invalid body formats are rejected locally with specific status codes', async () => {
+  const count = seen.length;
+  assert.equal((await call('/v1/builds', { method: 'POST', body: '{' })).status, 400);
+  assert.equal((await call('/v1/builds', { method: 'POST', body: '[]' })).status, 400);
+  assert.equal((await call('/v1/builds', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: '{}' })).status, 415);
+  assert.equal(seen.length, count);
+});
+test('configuration has no provider defaults and rejects unsafe origins, paths and account secrets', () => {
+  const env = { TC9_API_TOKEN: token, TC9_UPSTREAM_URL: 'https://provider.example', TC9_PUBLIC_ORIGIN: origin };
+  assert.throws(() => createGateway({ env: { TC9_API_TOKEN: token } }), /required/);
+  for (const value of ['http://public.example', 'https://hub.example/path', 'https://user@hub.example', 'https://hub.example?x=1']) {
+    assert.throws(() => createGateway({ env: { ...env, TC9_PUBLIC_ORIGIN: value } }), /HTTPS|origin/);
+  }
+  for (const path of ['//tc9-api/', '/a/../tc9-api/', '/tc9-api', '/path with spaces/']) {
+    assert.throws(() => createGateway({ env: { ...env, TC9_COOKIE_PATH: path } }), /cookie path/);
+  }
+  assert.throws(() => createGateway({ env: { ...env, TC9_PERSONAL_ACCOUNTS: 'true' } }), /TC9_VISITOR_SECRET/);
+  assert.throws(() => createGateway({ env: { ...env, TC9_ALLOW_MANAGEMENT: 'yes' } }), /true or false/);
+  for (const path of ['/', '/tc9-api/', '/test-hub/tc9-api/']) {
+    createGateway({ env: { ...env, TC9_COOKIE_PATH: path } }).close();
+  }
+  createGateway({ env: { ...env, TC9_PUBLIC_ORIGIN: 'http://localhost:5173' } }).close();
+});
+
+async function withGateway(env, run) {
+  const local = createGateway({
+    env,
+    fetch: async (url, options) => {
+      seen.push({ url, ...options });
+      return Response.json({ ok: true });
+    },
+  });
+  local.listen(0, '127.0.0.1');
+  await once(local, 'listening');
+  try {
+    await run(`http://127.0.0.1:${local.address().port}`);
+  } finally {
+    local.close();
+    local.closeAllConnections();
+  }
+}
+test('optional accounts are disabled independently of management and require no visitor cookie', async () => {
+  await withGateway(
+    { TC9_API_TOKEN: token, TC9_UPSTREAM_URL: 'https://provider.example', TC9_PUBLIC_ORIGIN: origin, TC9_ALLOW_MANAGEMENT: 'true' },
+    async (address) => {
+      const connection = await fetch(`${address}/connection`);
+      const cookies = connection.headers.getSetCookie();
+      const session = await connection.json();
+      assert.equal(cookies.length, 1);
+      const headers = {
+        Cookie: cookies[0].split(';')[0],
+        Origin: origin,
+        'X-CSRF-Token': session.csrf,
+        'Content-Type': 'application/json',
+      };
+      assert.equal((await fetch(`${address}/v1/realms/id/account`, { headers })).status, 403);
+      assert.equal((await fetch(`${address}/v1/realms/id/stop`, { method: 'POST', headers, body: '{}' })).status, 200);
+    },
+  );
+});
+test('account recovery and storage identity survive gateway restart and provider token rotation', async () => {
+  const original = await call('/connection', { headers: { Cookie: '' } });
+  const originalCookies = original.headers
+    .getSetCookie()
+    .map((value) => value.split(';')[0])
+    .join('; ');
+  await call('/v1/realms/realm-1/account', { headers: { Cookie: originalCookies } });
+  const accountKey = seen.at(-1).headers['X-TC9-Account-Key'];
+  const config = await (await call('/config')).json();
+  await withGateway(
+    {
+      TC9_API_TOKEN: `${token}_rotated`,
+      TC9_UPSTREAM_URL: 'https://tc9.example',
+      TC9_PUBLIC_ORIGIN: origin,
+      TC9_COOKIE_PATH: '/test-hub/tc9-api/',
+      TC9_PERSONAL_ACCOUNTS: 'true',
+      TC9_VISITOR_SECRET: 'a'.repeat(64),
+    },
+    async (address) => {
+      assert.equal((await (await fetch(`${address}/config`)).json()).instance, config.instance);
+      const refreshed = await fetch(`${address}/connection`, { headers: { Cookie: originalCookies } });
+      const issued = refreshed.headers.getSetCookie();
+      assert.equal(issued.length, 1); // Only the CSRF session rotates; keep the personal identity.
+      const visitor = originalCookies.split('; ').find((part) => part.startsWith('__Secure-tc9-player='));
+      await fetch(`${address}/v1/realms/realm-1/account`, { headers: { Cookie: `${issued[0].split(';')[0]}; ${visitor}` } });
+      assert.equal(seen.at(-1).headers['X-TC9-Account-Key'], accountKey);
+      assert.equal(seen.at(-1).headers.Authorization, `Bearer ${token}_rotated`);
+    },
+  );
 });

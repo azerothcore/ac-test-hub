@@ -15,12 +15,13 @@ interface Props {
   prefs: ServerPrefs;
   onPrefsChange: (prefs: ServerPrefs) => void;
   onBack: () => void;
+  hostedEnabled?: boolean;
   onProvision: () => void;
   hostedTask?: HostedTask;
 }
 
 /** One pull request: what it is, then the three steps to test it. */
-export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onProvision, hostedTask }: Props) {
+export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onProvision, hostedTask, hostedEnabled = false }: Props) {
   const { testing } = pull;
   const area = areaText(pull.area);
 
@@ -94,6 +95,7 @@ export function PullDetail({ pull, repository, prefs, onPrefsChange, onBack, onP
           pull={pull}
           prefs={prefs}
           onPrefsChange={onPrefsChange}
+          hostedEnabled={hostedEnabled}
           onProvision={onProvision}
           hostedTask={hostedTask}
         />

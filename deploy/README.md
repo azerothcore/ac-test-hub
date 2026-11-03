@@ -1,52 +1,61 @@
-# Shared TC9 provisioning connection
+# Optional hosted test realms
 
-All Test Hub visitors use **one operator-configured TC9 API token**, one build library and one realm library. There is no end-user login, password, personal token entry or user identification. The API token never reaches the browser.
+The default Test Hub is a static site, including on GitHub Pages. It requires no provisioning service and sends no gateway requests. Hosted compilation is an explicit opt-in for operators running a compatible TC9 developer API and a Node.js gateway beside the site.
 
-## Configure
+## Configure and build
 
-Use Node.js 24 (minimum 22.12). Run `npm ci`, `npm test`, `npm run lint`, `npm run build`.
-
-Copy `.env.example` to `.env` in the Test Hub checkout (ignored by Git):
+Use Node.js 24 (minimum 22.12). Run `npm ci`, then copy `.env.example` to `.env` (ignored by Git). Set:
 
 ```dotenv
-TC9_UPSTREAM_URL=https://test.expanded.space
+VITE_TC9_ENABLED=true
+TC9_UPSTREAM_URL=https://provisioner.example.org
 TC9_API_TOKEN=tc9_your_dedicated_test_hub_token
-TC9_PUBLIC_ORIGIN=https://expanded.space
-TC9_COOKIE_PATH=/test-hub/tc9-api/
+TC9_PUBLIC_ORIGIN=https://hub.example.org
+TC9_COOKIE_PATH=/tc9-api/
 PORT=8787
-TC9_VISITOR_SECRET=generate_a_random_64_character_hex_secret
+TC9_ALLOW_MANAGEMENT=false
+TC9_PERSONAL_ACCOUNTS=false
 ```
 
-The provider creates a dedicated **Test Hub** token in the provisioning tool's **Account & API** tab with `read`, `build`, `manage` and `download` scopes. Put it in `TC9_API_TOKEN`; no user needs to supply a token. `TC9_UPSTREAM_URL` must be an approved HTTPS origin. `TC9_PUBLIC_ORIGIN` is the exact browser origin and `TC9_COOKIE_PATH` includes the external website subpath.
+`VITE_TC9_ENABLED` is a **build-time** flag. Run `npm run build` after changing it. The remaining variables configure the gateway at runtime; restart it after changing them. GitHub Pages cannot run this gateway. Leave the feature disabled in the standard Pages workflow, or separately operate a gateway under the same public origin.
 
-`npm run serve:api` loads `.env` and listens only on loopback port 8787. Runtime environment variables take precedence. Never put secrets in `VITE_*`, Git, `dist/` or build arguments. Restrict the environment file to its operator/service user (`chmod 600`). Generate `TC9_VISITOR_SECRET` once with `openssl rand -hex 32` and retain it across restarts and API-token rotations; it signs private browser cookies used for personal game-account recovery.
+Create a dedicated provider token with `read`, `build` and `download` scopes. All site visitors intentionally share its resources, without a website login or personal token entry. Public visitors can initiate compilations, so configure repository eligibility, concurrency, account quotas and rate limits at the provider before enabling a public site. Do not use an operator's general-purpose token.
 
-For systemd, keep the same variables in root-owned mode-0600 `/etc/ac-test-hub/tc9.env` and install `ac-test-hub-api.service` in `/etc/systemd/system/`. EnvironmentFile supplies the runtime configuration directly; a second checkout `.env` is unnecessary. Source files are readable by the unprivileged `actesthub` service user. Restart the service after changing credentials.
+Lifecycle controls (start, stop, recompile, delete and cancel) are disabled by default and rejected by the gateway even if a caller constructs the request directly. For a trusted audience, explicitly set `TC9_ALLOW_MANAGEMENT=true` and grant the token `manage` scope. Every visitor will then be able to manage all resources in this shared provider account.
 
-Include `nginx-tc9.conf` inside the VM's static-site server block, adjusting the trusted edge IP if needed. The external edge strips `/test-hub/`, overwrites `X-Real-IP`, preserves Origin and cookies, and must disable buffering and allow a 300-second read timeout for `/test-hub/tc9-api/`. Run `nginx -t`, reload nginx and `systemctl enable --now ac-test-hub-api`.
+Personal game accounts are an optional TC9 extension (`GET/POST /api/v1/realms/{id}/account` with server-derived `X-TC9-Account-Key`). Enable `TC9_PERSONAL_ACCOUNTS=true` only when your provider implements it, grant `manage` scope, and set `TC9_VISITOR_SECRET` to the output of `openssl rand -hex 32`. Retain this secret across restarts and token rotation so visitors can recover their accounts. Management controls can remain disabled while personal account creation is enabled.
 
-The optional gateway lives at `tc9-api/` relative to the website. Static installations without it retain the public queue and local server commands. For local development, Vite proxies this path to port 8787. Set `TC9_PUBLIC_ORIGIN=http://localhost:5173` and `TC9_COOKIE_PATH=/tc9-api/` in `.env`, then run `npm run serve:api` and `npm run dev` in separate terminals. Keep the upstream HTTPS.
+The provider must support durable `Idempotency-Key` for build creation and atomic, exact-input active-build reuse through `X-TC9-Reuse-Active: true`. Reuse must compare the full request: repository, PR, builder, modules and character fixtures; sharing a PR number alone is insufficient. Verify these capabilities in the provider's developer API documentation. The hub forwards a fixed set of `/api/v1` routes, not internal worker or token-management endpoints.
 
-## Use
+Keep secrets out of `VITE_*`, Git, `dist/` and build arguments. Restrict the runtime file to its operator/service user (`chmod 600`). Nothing in the frontend contains the provider token or visitor secret.
 
-Select a PR. Step 2 offers **Run it on your server OR use a hosted test realm**. Choose the hosted option and configure the realm, or open **Test Hub builds & realms**. The shared connection is automatic. Select a compilation server and up to five approved modules. Optional characters use the validated JSON editor (up to three; an example is provided), including items and active/completed quest IDs. Submit **Compile & create realm**.
+## Serve
 
-The API pins the authoritative PR head. The library displays its revision and separate compilation, database and realm progress. A compact progress card and changing action button remain on the exact PR when the dialog closes. The selected build is polled in the background and restored after reload; other PRs never inherit its status. All visitors can see and manage the same account's resources. Start, stop, recompile and delete controls reflect realm state; stop, recompile, delete and build cancellation ask for confirmation. Use **Get my game account** on a running realm to create a separate PR-specific game login for this visitor. Another visitor gets a different username/password. Repeat clicks, refreshes and gateway restarts recover the same account using a persistent HttpOnly browser cookie. Passwords are shown only on request and are not stored in browser storage. Requested test fixtures are copied to personal characters with unique names. Clearing the visitor cookie creates a new visitor identity for game-account recovery; it does not require a website login.
+`npm run serve:api` loads `.env` and binds only to `127.0.0.1:8787`. Serve `dist/` with your web server and proxy **`tc9-api/` relative to the site** to the gateway. See [nginx-tc9.conf](nginx-tc9.conf). Preserve Origin, cookies and Range headers; disable response buffering for streamed archives.
 
-Prepare archives independently for the pinned build or the current realm, then download the core ZIP. Archives stream through the gateway with Range support, without holding the full file in browser or gateway memory. Errors preserve upstream status and retry guidance. Token scopes are independent: read access does not guarantee build/manage/download access.
+| Site address | `TC9_PUBLIC_ORIGIN` | `TC9_COOKIE_PATH` | nginx location |
+| --- | --- | --- | --- |
+| `https://hub.example.org/` | `https://hub.example.org` | `/tc9-api/` | `/tc9-api/` |
+| `https://hub.example.org/test-hub/` | `https://hub.example.org` | `/test-hub/tc9-api/` | `/test-hub/tc9-api/` |
 
-## Gateway behavior
+Serve a subpath with its trailing slash. If another reverse proxy strips a prefix, adjust the inner nginx location to the path it receives; the cookie path must still match the browser-visible URL. No private network addresses or trusted edge topology are assumed. Origins must use HTTPS and contain no credentials, path, query or fragment. The upstream API origin is fixed by the operator; redirects are rejected.
 
-All requests use the **same server-side `TC9_API_TOKEN`**. Callers cannot override it via headers or enter their own credential. The provisioning API credential remains shared; the separate anonymous browser key only selects a personal in-game account on each realm.
+For systemd, [ac-test-hub-api.service](ac-test-hub-api.service) is an example using an unprivileged `actesthub` user, `/opt/ac-test-hub` checkout and root-owned mode-0600 `/etc/ac-test-hub/tc9.env`. Adjust these paths and the Node executable for your host. EnvironmentFile supplies runtime settings directly; the checkout `.env` is unnecessary at runtime. Validate nginx configuration, then enable/restart the service.
 
-The gateway issues a short-lived, signed, HttpOnly, Secure, SameSite=Strict cookie solely for browser CSRF protection, with no website login or session database. A separate signed, 180-day HttpOnly visitor cookie recovers personal game accounts; the gateway derives a private realm-specific `X-TC9-Account-Key` server-side and never forwards a caller-supplied account key. Mutations require its nonce and the exact configured Origin. Refresh/reload obtains a new nonce after service restarts or expiry. Public configuration contains only the upstream origin and whether the shared token is configured. Responses are `no-store`; tokens and game credentials are never stored in localStorage, sessionStorage, URLs or compiled assets.
+For local development, set `VITE_TC9_ENABLED=true`, `TC9_PUBLIC_ORIGIN=http://localhost:5173` and `TC9_COOKIE_PATH=/tc9-api/`. Run `npm run serve:api` and `npm run dev` separately. Vite proxies the gateway path to loopback. Only loopback public origins can use HTTP; keep the remote provider on HTTPS.
 
-Only implemented developer-API route/method/query combinations are forwarded. Arbitrary hosts, redirects, account-token management and internal worker routes are rejected. The API remains authoritative for allowed repositories, PR eligibility, ownership of the shared provider account, capacity and fixture validity. All visitors intentionally have the access granted by the shared token.
+## Use and recovery
 
-Library/archive polling stops when the dialog closes. The selected PR’s tracked compilation continues to update outside the dialog, preserves the last known progress during outages, and backs off on errors/Retry-After. Mutations are never automatically retried. Synchronous guards prevent duplicate clicks; Web Locks serialize same-PR submissions across supporting browser tabs. Before a fresh request, the library is checked for an already-running compilation of this PR. An uncertain submission persists its original inputs and Idempotency-Key and retries that exact request after reload. Only an explicit rejection permits editing inputs; an accepted operation is viewed instead of submitted again. Terminal failures offer a deliberate fresh compilation. After a reload or an uncertain submission, check the build library before submitting again.
+The combined run step offers local server instructions or a hosted test realm. Choose a PR, builder, up to five approved modules and optional test characters. The API pins the authoritative PR head. The selected operation's progress remains on that PR after the dialog closes and after reload. Library polling stops when the dialog closes; progress polling continues for the selected PR, with backoff on errors and Retry-After.
+
+Synchronous guards and cross-tab Web Locks prevent duplicate clicks. An uncertain submission retains its exact inputs and Idempotency-Key for a deliberate retry; the provider recovers that operation or atomically reuses an identical active build. Mutations are never automatically replayed. Unrelated module/character choices are never replaced by another visitor's build just because it uses the same PR. Only an explicit rejection permits editing unconfirmed inputs. A completed build or an authoritative missing-build response permits a deliberate new compilation; finished PRs can therefore be tested again after a new revision. Creating another realm after success asks for confirmation. Stored request IDs and pending inputs are isolated by provider origin and website path; credentials and API responses are never persisted.
+
+When personal accounts are enabled, **Get my game account** creates a separate PR-specific game login per visitor. A signed HttpOnly browser cookie recovers it; clearing that cookie creates a new anonymous identity. Passwords are shown only on request and retained only in component memory. No individual website login is needed.
+
+Archives stream without buffering the complete file. Downloads are forced to binary attachments and support byte ranges. Non-JSON API responses are rejected. A signed, short-lived CSRF cookie and matching Origin/nonce protect mutations; these cookies do not restrict access to this intentionally shared service. Use **Retry connection** after a gateway restart or cookie expiry.
 
 ## Validate and deploy
 
-`npm test` covers existing queue/report behavior, fixture validation and mocked gateway tests (shared-account forwarding, CSRF, signed cookies, route restrictions, idempotency, errors and streaming). Live smoke tests use authenticated GETs only; no real compilation or realm mutation is needed to validate deployment.
+Run `npm run lint`, `npm run typecheck`, `npm test` and `npm run build`. Test both the default static build and an opted-in build at your intended root/subpath. Gateway tests use mocked upstream responses; no live compilation or realm mutation is required.
 
-Deploy a pushed fork commit, run `npm ci`, checks and a staging production build. Back up the old `dist` and nginx configuration, restart the gateway, replace `dist`, and reload nginx. Record the commit in `/var/lib/ac-test-hub/deployed-commit`; verify the external URL and shared connection. Keep `/var/lib/ac-test-hub/data.json` and its refresh timer. Roll back using the previous source/dist and restart the gateway.
+Back up the previous release and runtime configuration, deploy a reviewed commit with its dependencies, rebuild with the intended feature flag, restart the gateway and reload the web server. Verify the public static queue and, when enabled, `/tc9-api/config` and `/tc9-api/connection` beneath the site's path. Preserve any separately managed snapshot refresh job and data file. Roll back source, built assets and configuration together.

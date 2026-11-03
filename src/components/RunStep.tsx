@@ -11,6 +11,7 @@ interface Props {
   pull: PullSummary;
   prefs: ServerPrefs;
   onPrefsChange: (prefs: ServerPrefs) => void;
+  hostedEnabled?: boolean;
   onProvision: () => void;
   hostedTask?: HostedTask;
 }
@@ -38,29 +39,31 @@ function InlineText({ text }: { text: string }) {
 }
 
 /** Step 2: the wiki's commands for this PR and this tester's setup. */
-export function RunStep({ pull, prefs, onPrefsChange, onProvision, hostedTask }: Props) {
+export function RunStep({ pull, prefs, onPrefsChange, onProvision, hostedTask, hostedEnabled = false }: Props) {
   const [option, setOption] = useState<'local' | 'hosted'>(hostedTask ? 'hosted' : 'local');
   const steps = testSteps(pull, prefs);
   const sqlOnly = pull.kind === 'sql-only';
 
   return (
     <li className="step">
-      <h3 className="step__title">Run it on your server OR use a hosted test realm</h3>
-      <fieldset className="segmented run-options">
-        <legend className="field__label">Where to run this PR</legend>
-        <label className="segmented__option">
-          <input type="radio" name="run-option" value="local" checked={option === 'local'} onChange={() => setOption('local')} />
-          <span>Run it on your server</span>
-        </label>
-        <span className="run-options__or" aria-hidden="true">
-          OR
-        </span>
-        <label className="segmented__option">
-          <input type="radio" name="run-option" value="hosted" checked={option === 'hosted'} onChange={() => setOption('hosted')} />
-          <span>Use a hosted test realm</span>
-        </label>
-      </fieldset>
-      {(option === 'hosted' || hostedTask) && (
+      <h3 className="step__title">{hostedEnabled ? 'Run it on your server OR use a hosted test realm' : 'Run it on your server'}</h3>
+      {hostedEnabled && (
+        <fieldset className="segmented run-options">
+          <legend className="field__label">Where to run this PR</legend>
+          <label className="segmented__option">
+            <input type="radio" name="run-option" value="local" checked={option === 'local'} onChange={() => setOption('local')} />
+            <span>Run it on your server</span>
+          </label>
+          <span className="run-options__or" aria-hidden="true">
+            OR
+          </span>
+          <label className="segmented__option">
+            <input type="radio" name="run-option" value="hosted" checked={option === 'hosted'} onChange={() => setOption('hosted')} />
+            <span>Use a hosted test realm</span>
+          </label>
+        </fieldset>
+      )}
+      {hostedEnabled && (option === 'hosted' || hostedTask) && (
         <div className="hosted-option">
           {option === 'hosted' && <p>Compile this PR and create a test realm. You can close the dialog and follow its progress here.</p>}
           <HostedProgress task={hostedTask} onOpen={onProvision} />

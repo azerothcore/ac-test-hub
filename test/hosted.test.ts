@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { HostedTracker, hostedProgress, taskKey } from '../src/lib/hosted';
+import { HostedTracker, canCompileAgain, hostedProgress, taskKey } from '../src/lib/hosted';
 import { APIError } from '../src/lib/tc9';
-import type { Build, BuildInput, BuildPage, request } from '../src/lib/tc9';
+import type { Build, BuildInput, request } from '../src/lib/tc9';
 
 type MockRequest = (path: string, options?: Parameters<typeof request>[1]) => Promise<unknown>;
 const repository = 'azerothcore/azerothcore-wotlk';
@@ -9,9 +9,6 @@ const input: BuildInput = { repository, pr_number: 42, build_server: 'auto', mod
 const key = taskKey(repository, 42);
 function build(id = 'build-42', pr = 42, status = 'queued'): Build {
   return { id, repository, pr_number: pr, status, sha: 'a'.repeat(40), created_at: '2026-11-03T00:00:00Z' };
-}
-function page(builds: Build[] = [], total = builds.length): BuildPage {
-  return { builds, total, limit: 100, offset: 0 };
 }
 function storage() {
   const values = new Map<string, string>();
@@ -37,14 +34,13 @@ describe('hosted compilation requests', () => {
     const pending = deferred<Build>();
     const send = vi
       .fn<MockRequest>()
-      .mockResolvedValueOnce(page())
       .mockImplementationOnce(() => pending.promise)
       .mockResolvedValue(build());
     const tracker = new HostedTracker(storage(), send as typeof request);
     const first = tracker.submit(input, 'csrf');
     expect(tracker.snapshot()[key].submitting).toBe(true);
     await tracker.submit(input, 'csrf');
-    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(send).toHaveBeenCalledTimes(1));
     pending.resolve(build());
     await first;
     await tracker.submit(input, 'csrf');
@@ -53,7 +49,7 @@ describe('hosted compilation requests', () => {
   });
   it('reuses the same request key and original input after a lost response, changed form and page reload', async () => {
     const saved = storage();
-    const first = vi.fn<MockRequest>().mockResolvedValueOnce(page()).mockRejectedValueOnce(new TypeError('Network disconnected'));
+    const first = vi.fn<MockRequest>().mockRejectedValueOnce(new TypeError('Network disconnected'));
     const tracker = new HostedTracker(saved, first as typeof request);
     await tracker.submit(input, 'csrf');
     const intent = tracker.snapshot()[key].intent;
@@ -69,7 +65,6 @@ describe('hosted compilation requests', () => {
   it('retries an ambiguous 5xx with the same key, but allows fixing explicitly rejected input', async () => {
     const send = vi
       .fn<MockRequest>()
-      .mockResolvedValueOnce(page())
       .mockRejectedValueOnce(new APIError('Gateway unavailable', 502, 0))
       .mockResolvedValueOnce(build());
     const tracker = new HostedTracker(storage(), send as typeof request);
@@ -79,9 +74,7 @@ describe('hosted compilation requests', () => {
     expect(send.mock.calls.at(-1)?.[1]?.key).toBe(original);
     const rejected = vi
       .fn<MockRequest>()
-      .mockResolvedValueOnce(page())
       .mockRejectedValueOnce(new APIError('Bad fixture', 400, 0))
-      .mockResolvedValueOnce(page())
       .mockResolvedValueOnce(build());
     const other = new HostedTracker(storage(), rejected as typeof request);
     await other.submit(input, 'csrf');
@@ -94,35 +87,35 @@ describe('hosted compilation requests', () => {
     vi.setSystemTime(new Date('2026-11-03T00:00:00Z'));
     const send = vi
       .fn<MockRequest>()
-      .mockResolvedValueOnce(page())
       .mockRejectedValueOnce(new APIError('Queue full', 429, 30))
       .mockResolvedValueOnce(build());
     const tracker = new HostedTracker(storage(), send as typeof request);
     await tracker.submit(input, 'csrf');
     await tracker.submit(input, 'csrf');
-    expect(send).toHaveBeenCalledTimes(2);
+    expect(send).toHaveBeenCalledTimes(1);
     vi.advanceTimersByTime(30000);
     await tracker.submit(input, 'csrf');
-    expect(send).toHaveBeenCalledTimes(3);
+    expect(send).toHaveBeenCalledTimes(2);
   });
-  it('finds a running build for the exact repository and PR, including later library pages', async () => {
-    const send = vi
-      .fn<MockRequest>()
-      .mockResolvedValueOnce(page([build('other-pr', 99)], 101))
-      .mockResolvedValueOnce(page([build()], 101));
+  it('submits the exact requested configuration without adopting an unrelated active build of the PR', async () => {
+    const send = vi.fn<MockRequest>().mockResolvedValueOnce(build());
     const tracker = new HostedTracker(storage(), send as typeof request);
+    const configured = { ...input, modules: ['mod-autobalance'] };
+    await tracker.submit(configured, 'csrf');
+    expect(send).toHaveBeenCalledExactlyOnceWith('v1/builds', expect.objectContaining({ method: 'POST', data: configured }));
+  });
+  it('recovers from a browser lock failure without leaving the operation stuck', async () => {
+    const send = vi.fn<MockRequest>().mockResolvedValueOnce(build());
+    const lock = vi
+      .fn<(name: string, run: () => Promise<void>) => Promise<void>>()
+      .mockRejectedValueOnce(new Error('Lock denied'))
+      .mockImplementationOnce((_name, run) => run());
+    const tracker = new HostedTracker(storage(), send as typeof request, lock);
+    await tracker.submit(input, 'csrf');
+    expect(tracker.snapshot()[key]).toMatchObject({ submitting: false, error: 'Lock denied' });
+    expect(send).not.toHaveBeenCalled();
     await tracker.submit(input, 'csrf');
     expect(tracker.snapshot()[key].id).toBe('build-42');
-    expect(send).toHaveBeenCalledWith('v1/builds?limit=100&offset=100');
-    expect(send.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
-  });
-  it('does not submit when checking existing builds fails', async () => {
-    const send = vi.fn<MockRequest>().mockRejectedValueOnce(new TypeError('Offline'));
-    const tracker = new HostedTracker(storage(), send as typeof request);
-    await tracker.submit(input, 'csrf');
-    expect(send).toHaveBeenCalledTimes(1);
-    expect(tracker.snapshot()[key].error).toBe('Offline');
-    expect(tracker.snapshot()[key].submitting).toBe(false);
   });
   it('serializes two tabs and adopts the accepted build when the second tab acquires its lock', async () => {
     const saved = storage();
@@ -132,18 +125,50 @@ describe('hosted compilation requests', () => {
       tail = next;
       return next;
     };
-    const send = vi.fn<MockRequest>().mockResolvedValueOnce(page()).mockResolvedValueOnce(build()).mockResolvedValueOnce(build());
+    const send = vi.fn<MockRequest>().mockResolvedValueOnce(build()).mockResolvedValueOnce(build());
     const tab1 = new HostedTracker(saved, send as typeof request, lock);
     const tab2 = new HostedTracker(saved, send as typeof request, lock);
     await Promise.all([tab1.submit(input, 'csrf'), tab2.submit(input, 'csrf')]);
     expect(send.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
     expect(tab1.snapshot()[key].id).toBe(tab2.snapshot()[key].id);
   });
+  it('allows an explicit new compilation after success, while repeated requests keep the existing operation', async () => {
+    const send = vi
+      .fn<MockRequest>()
+      .mockResolvedValueOnce(build('ready', 42, 'completed'))
+      .mockResolvedValueOnce(build('ready', 42, 'completed'))
+      .mockResolvedValueOnce(build('new-revision'));
+    const tracker = new HostedTracker(storage(), send as typeof request);
+    tracker.accept(build('ready', 42, 'completed'));
+    expect(canCompileAgain(tracker.snapshot()[key])).toBe(true);
+    await tracker.submit(input, 'csrf');
+    expect(send.mock.calls.some(([, options]) => options?.method === 'POST')).toBe(false);
+    await tracker.submit(input, 'csrf', true);
+    expect(tracker.snapshot()[key].id).toBe('new-revision');
+  });
+  it('offers deliberate recovery when a tracked build no longer exists without automatically creating a replacement', async () => {
+    const send = vi
+      .fn<MockRequest>()
+      .mockRejectedValueOnce(new APIError('Not found', 404, 0))
+      .mockResolvedValueOnce(build('replacement'));
+    const tracker = new HostedTracker(storage(), send as typeof request);
+    tracker.accept(build());
+    await tracker.poll(key);
+    expect(canCompileAgain(tracker.snapshot()[key])).toBe(true);
+    expect(hostedProgress(tracker.snapshot()[key]).label).toBe('Compilation no longer available');
+    await tracker.poll(key);
+    expect(send).toHaveBeenCalledTimes(1);
+    // Backoff on the failed read is retained; an explicit retry is allowed afterward.
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 16000);
+    await tracker.submit(input, 'csrf', true);
+    expect(tracker.snapshot()[key].id).toBe('replacement');
+    expect(send.mock.calls.filter(([, options]) => options?.method === 'POST')).toHaveLength(1);
+  });
   it('only creates a fresh request after an explicitly requested retry of a terminal failure', async () => {
     const send = vi
       .fn<MockRequest>()
       .mockResolvedValueOnce(build('failed', 42, 'failed'))
-      .mockResolvedValueOnce(page())
       .mockResolvedValueOnce(build('replacement'));
     const tracker = new HostedTracker(storage(), send as typeof request);
     tracker.accept(build('failed', 42, 'failed'));
@@ -228,11 +253,39 @@ describe('per-PR progress and recovery', () => {
         throw new Error('Blocked');
       },
     };
-    const send = vi.fn<MockRequest>().mockResolvedValueOnce(page()).mockResolvedValueOnce(build());
+    const send = vi.fn<MockRequest>().mockResolvedValueOnce(build());
     const tracker = new HostedTracker(blocked, send as typeof request);
     await tracker.submit(input, 'csrf');
     expect(tracker.snapshot()[key].id).toBe('build-42');
     const corrupt = new HostedTracker({ getItem: () => '{invalid', setItem: () => undefined });
     expect(corrupt.snapshot()).toEqual({});
+  });
+  it('isolates stored requests and Web Locks when provider or site path changes', async () => {
+    const saved = storage();
+    const send = vi.fn<MockRequest>().mockRejectedValueOnce(new Error('Lost response')).mockResolvedValueOnce(build());
+    const lock = vi.fn<(name: string, run: () => Promise<void>) => Promise<void>>().mockImplementation((_name, run) => run());
+    const first = new HostedTracker(saved, send as typeof request, lock, 'provider-one');
+    await first.submit(input, 'csrf');
+    const second = new HostedTracker(saved, send as typeof request, lock, 'provider-two');
+    expect(second.snapshot()).toEqual({});
+    await second.submit(input, 'csrf');
+    expect(send.mock.calls[0][1]?.key).not.toBe(send.mock.calls[1][1]?.key);
+    expect(lock.mock.calls[0][0]).not.toBe(lock.mock.calls[1][0]);
+  });
+  it('rejects corrupt persisted inputs before they reach the retry UI or API', () => {
+    const saved = storage();
+    for (const change of [{ modules: [null] }, { characters: [{ name: 'bad' }] }, { modules: Array(6).fill('mod-a') }]) {
+      saved.setItem(
+        'ac-test-hub:hosted:v2:default',
+        JSON.stringify({
+          [key]: {
+            repository,
+            prNumber: 42,
+            intent: { key: 'durable-key', input: { ...input, ...change } },
+          },
+        }),
+      );
+      expect(new HostedTracker(saved).snapshot()).toEqual({});
+    }
   });
 });

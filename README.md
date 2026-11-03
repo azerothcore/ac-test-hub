@@ -11,9 +11,9 @@ The queue can be filtered by the part of the game a PR touches (class, instance,
 
 ## Compile and provision test realms
 
-This fork connects to a TC9 compilation/provisioning service through a small Node.js gateway. Configure a single dedicated Test Hub token in `.env`; every visitor uses that shared account without logging in or supplying a token. Users can compile a selected PR with modules and optional test characters, follow progress on the PR even after closing the dialog, manage the shared realm library, get a separate personal game account for each visitor, and download built cores. The local and hosted run options share one step. The token stays server-side.
+Self-hosted installations can opt into a TC9 compilation/provisioning service through a small Node.js gateway. A dedicated server-side token lets visitors compile selected PRs, follow progress and download built cores without entering personal API credentials. Realm management and separate in-game accounts are optional capabilities.
 
-See [configuration and deployment](deploy/README.md) and [.env.example](.env.example). The deployed fork is available at https://expanded.space/test-hub/.
+The feature is **disabled by default**. The standard static site and GitHub Pages deployment retain the local server testing flow and require no backend. See [configuration and deployment](deploy/README.md) and [.env.example](.env.example) to enable hosted realms on your own infrastructure.
 
 ## Why
 
@@ -28,7 +28,7 @@ GitHub Actions, every 30 minutes
         └── previous data.json from the site: PRs that did not change are not fetched again
 ```
 
-The PR queue has no token in the browser. A scheduled workflow reads public data with its own token, writes one JSON file and publishes a static site. This fork also supports an optional self-hosted TC9 gateway for shared compilation and realm management (see below). If the search for open PRs fails, nothing is deployed and the previous site stays up; if a single PR's details can't be read, that PR keeps what the previous snapshot knew.
+The PR queue has no token in the browser. A scheduled workflow reads public data with its own token, writes one JSON file and publishes a static site. The hub also supports an optional self-hosted TC9 gateway for shared compilation and realm management (see the deployment guide). If the search for open PRs fails, nothing is deployed and the previous site stays up; if a single PR's details can't be read, that PR keeps what the previous snapshot knew.
 
 The snapshot reuses the details of every PR whose `updated_at` did not change since the previous one, so most runs make only a few requests. Once a day it fetches everything again, which also picks up labels added to linked issues in the meantime.
 

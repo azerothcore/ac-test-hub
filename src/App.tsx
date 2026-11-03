@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { HOSTED_ENABLED } from './lib/tc9';
 import { TC9Panel } from './components/TC9Panel';
 import { ExternalLink } from './components/ExternalLink';
 import { PullDetail } from './components/PullDetail';
@@ -77,13 +78,15 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
           <p className="masthead__for">for AzerothCore pull requests</p>
         </div>
         <Summary snapshot={snapshot} />
-        <TC9Panel
-          repository={snapshot.repository}
-          pull={current}
-          open={provisionOpen}
-          onOpenChange={setProvisionOpen}
-          onHostedChange={setHostedTasks}
-        />
+        {HOSTED_ENABLED && (
+          <TC9Panel
+            repository={snapshot.repository}
+            pull={current}
+            open={provisionOpen}
+            onOpenChange={setProvisionOpen}
+            onHostedChange={setHostedTasks}
+          />
+        )}
         <p className="masthead__meta">
           {sample ? (
             <strong className="sample-flag">Made-up sample data</strong>
@@ -118,6 +121,7 @@ function Hub({ snapshot, sample }: { snapshot: Snapshot; sample: boolean }) {
             prefs={prefs}
             onPrefsChange={setPrefs}
             onBack={() => select(null)}
+            hostedEnabled={HOSTED_ENABLED}
             onProvision={() => setProvisionOpen(true)}
             hostedTask={hostedTasks[taskKey(snapshot.repository, current.number)]}
           />

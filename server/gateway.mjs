@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { Readable } from 'node:stream';
 import { pipeline } from 'node:stream/promises';
 import { pathToFileURL } from 'node:url';
@@ -47,45 +47,86 @@ function json(res, status, body, headers = {}) {
   });
   res.end(JSON.stringify(body));
 }
+class RequestError extends Error {
+  constructor(status, message) {
+    super(message);
+    this.status = status;
+  }
+}
 async function body(req) {
-  if (!req.headers['content-type']?.startsWith('application/json')) {
-    throw new Error('Expected application/json');
+  if (req.headers['content-type']?.split(';')[0].trim().toLowerCase() !== 'application/json') {
+    throw new RequestError(415, 'Expected application/json');
   }
-  let data = '';
+  const chunks = [];
+  let size = 0;
   for await (const chunk of req) {
-    data += chunk;
-    if (Buffer.byteLength(data) > 65536) {
-      throw new Error('Request exceeds 64 KiB');
+    size += chunk.length;
+    if (size > 65536) {
+      throw new RequestError(413, 'Request exceeds 64 KiB');
     }
+    chunks.push(chunk);
   }
-  const value = data ? JSON.parse(data) : {};
+  let value;
+  try {
+    value = JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}');
+  } catch {
+    throw new RequestError(400, 'Invalid JSON');
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('Expected a JSON object');
+    throw new RequestError(400, 'Expected a JSON object');
   }
   return value;
+}
+function origin(value, name, allowLocal = false) {
+  const url = new URL(value);
+  if (
+    url.protocol !== 'https:' &&
+    !(allowLocal && url.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+  ) {
+    throw new Error(`${name}: HTTPS required (HTTP is allowed only for loopback development)`);
+  }
+  if (url.pathname !== '/' || url.search || url.hash || url.username || url.password) {
+    throw new Error(`${name} must be an origin without credentials, path, query or fragment`);
+  }
+  return url;
+}
+function flag(env, name) {
+  if (env[name] && !['true', 'false'].includes(env[name])) {
+    throw new Error(`${name} must be true or false`);
+  }
+  return env[name] === 'true';
 }
 
 /** All visitors share the operator-configured account. Cookies protect CSRF, not user identity. */
 export function createGateway(options = {}) {
   const env = options.env ?? process.env;
-  const upstream = new URL(env.TC9_UPSTREAM_URL ?? 'https://test.expanded.space');
-  const publicOrigin = new URL(env.TC9_PUBLIC_ORIGIN ?? 'https://expanded.space').origin;
-  const secure = publicOrigin.startsWith('https:');
-  if (upstream.protocol !== 'https:' && !(options.allowInsecure && upstream.hostname === '127.0.0.1')) {
-    throw new Error('HTTPS upstream required');
-  }
-  if (upstream.pathname !== '/' || upstream.search || upstream.hash || upstream.username || upstream.password) {
-    throw new Error('Upstream must be an origin');
-  }
-  const cookiePath = env.TC9_COOKIE_PATH ?? '/test-hub/tc9-api/';
-  if (!/^\/[A-Za-z0-9/_-]*\/$/.test(cookiePath)) {
+  const upstream = env.TC9_UPSTREAM_URL ? origin(env.TC9_UPSTREAM_URL, 'TC9_UPSTREAM_URL', options.allowInsecure) : null;
+  const publicOrigin = env.TC9_PUBLIC_ORIGIN ? origin(env.TC9_PUBLIC_ORIGIN, 'TC9_PUBLIC_ORIGIN', true).origin : null;
+  const secure = publicOrigin?.startsWith('https:');
+  const cookiePath = env.TC9_COOKIE_PATH || '/tc9-api/';
+  if (!/^\/(?:[A-Za-z0-9_-]+\/)*$/.test(cookiePath)) {
     throw new Error('Invalid cookie path');
   }
-  const cookieName = secure ? '__Secure-tc9-hub' : 'tc9-hub-dev';
   const token = env.TC9_API_TOKEN ?? '';
-  const configured = /^tc9_[A-Za-z0-9_]{20,256}$/.test(token);
+  if (token && !/^tc9_[A-Za-z0-9_]{20,256}$/.test(token)) {
+    throw new Error('Invalid TC9_API_TOKEN');
+  }
+  if (token && (!upstream || !publicOrigin)) {
+    throw new Error('TC9_UPSTREAM_URL and TC9_PUBLIC_ORIGIN are required with TC9_API_TOKEN');
+  }
+  const configured = !!token;
+  const capabilities = {
+    management: flag(env, 'TC9_ALLOW_MANAGEMENT'),
+    personalAccounts: flag(env, 'TC9_PERSONAL_ACCOUNTS'),
+  };
+  const visitorKey = env.TC9_VISITOR_SECRET;
+  if (capabilities.personalAccounts && !/^[a-fA-F0-9]{64,}$/.test(visitorKey ?? '')) {
+    throw new Error('TC9_VISITOR_SECRET must contain at least 32 random bytes in hex for personal accounts');
+  }
+  // Stable across token rotation; different providers or website paths never reuse stored requests.
+  const instance = createHash('sha256').update(`${publicOrigin}|${cookiePath}|${upstream?.origin}`).digest('hex').slice(0, 24);
+  const cookieName = secure ? '__Secure-tc9-hub' : 'tc9-hub-dev';
   const signingKey = randomBytes(32);
-  const visitorKey = env.TC9_VISITOR_SECRET || createHmac('sha256', token).update('tc9-visitor-cookie-v1').digest('hex');
   const visitorCookieName = secure ? '__Secure-tc9-player' : 'tc9-player-dev';
   function visitorSignature(value) {
     return createHmac('sha256', visitorKey).update(value).digest('hex');
@@ -131,7 +172,7 @@ export function createGateway(options = {}) {
         return;
       }
       if (url.pathname === '/config' && method === 'GET') {
-        json(res, 200, { upstream: upstream.origin, sharedAccount: configured });
+        json(res, 200, { upstream: upstream?.origin ?? '', sharedAccount: configured, instance, capabilities });
         return;
       }
       if (!configured) {
@@ -148,7 +189,7 @@ export function createGateway(options = {}) {
             `${cookieName}=${value}.${signature(value)}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=${TTL / 1000}${secure ? '; Secure' : ''}`,
           );
         }
-        if (!readVisitor(req.headers.cookie)) {
+        if (capabilities.personalAccounts && !readVisitor(req.headers.cookie)) {
           const visitor = randomBytes(32).toString('hex');
           cookies.push(
             `${visitorCookieName}=${visitor}.${visitorSignature(visitor)}; Path=${cookiePath}; HttpOnly; SameSite=Strict; Max-Age=15552000${secure ? '; Secure' : ''}`,
@@ -169,11 +210,17 @@ export function createGateway(options = {}) {
         json(res, 404, { error: 'Unknown API route' });
         return;
       }
-      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json' };
+      const accountRoute = url.pathname.endsWith('/account');
+      const managementRoute = method === 'DELETE' || /\/(?:start|stop|recompile)$/.test(url.pathname);
+      if ((accountRoute && !capabilities.personalAccounts) || (managementRoute && !capabilities.management)) {
+        json(res, 403, { error: 'This operation is disabled by the site operator.' });
+        return;
+      }
+      const headers = { Authorization: `Bearer ${token}`, Accept: 'application/json', 'Accept-Encoding': 'identity' };
       if (method === 'POST' && url.pathname === '/v1/builds') {
         headers['X-TC9-Reuse-Active'] = 'true';
       }
-      if (url.pathname.endsWith('/account')) {
+      if (accountRoute) {
         const visitor = readVisitor(req.headers.cookie);
         if (!visitor) {
           json(res, 401, { error: 'Reload the Test Hub to recover your personal game account.' });
@@ -214,6 +261,20 @@ export function createGateway(options = {}) {
             responseHeaders[name] = response.headers.get(name);
           }
         }
+        const download = url.pathname.endsWith('/download') && response.ok;
+        if (download) {
+          // Upstream cannot serve active HTML/SVG under the hub's origin or inject a filename.
+          if (response.headers.has('content-encoding')) {
+            throw new Error('Encoded archive responses cannot be streamed with byte ranges');
+          }
+          responseHeaders['content-type'] = 'application/octet-stream';
+          responseHeaders['content-disposition'] = 'attachment; filename="core.zip"';
+        } else if (
+          response.status !== 204 &&
+          !/^application\/(?:[a-z0-9.+-]+\+)?json(?:;|$)/i.test(response.headers.get('content-type') ?? '')
+        ) {
+          throw new Error('Expected a JSON API response');
+        }
         if (response.headers.has('content-encoding')) {
           delete responseHeaders['content-length'];
         }
@@ -228,8 +289,11 @@ export function createGateway(options = {}) {
       }
     } catch (error) {
       if (!res.headersSent) {
-        json(res, error instanceof SyntaxError || error.message?.startsWith('Expected') || error.message?.includes('64 KiB') ? 400 : 502, {
-          error: 'Request failed. Check your input or retry when the provisioning service is available.',
+        json(res, error instanceof RequestError ? error.status : 502, {
+          error:
+            error instanceof RequestError
+              ? error.message
+              : 'The provisioning service is unavailable or returned an invalid response. Try again later.',
         });
       } else {
         res.destroy();
